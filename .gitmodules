@@ -1,3 +1,4 @@
 [submodule "dep/MyVK"]
 	path = dep/MyVK
 	url = git@github.com:AdamYuan/MyVK.git
+	branch = vkgsraster
