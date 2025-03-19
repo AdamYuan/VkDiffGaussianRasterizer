@@ -1,0 +1,341 @@
+#version 460
+#extension GL_EXT_shader_16bit_storage : require
+#extension GL_EXT_shader_explicit_arithmetic_types : require
+#extension GL_KHR_shader_subgroup_ballot : require
+#extension GL_KHR_shader_subgroup_shuffle : require
+#extension GL_KHR_shader_subgroup_arithmetic : require
+#extension GL_EXT_control_flow_attributes : require
+#include "DeviceSorter.glsl"
+#include "DeviceSorterWave.glsl"
+
+layout(local_size_x = SORT_DIM, local_size_y = 1, local_size_z = 1) in;
+
+#define WAVES_PER_GROUP (SORT_DIM / LANES_PER_WAVE)
+
+layout(std430, binding = 1) coherent buffer bPassHists {
+	uint gPassHists[]; // Size: divCeil(gKeyCount, SORT_PART_SIZE) * RADIX * PASS_COUNT
+};
+layout(std430, binding = 2) coherent buffer bIndices {
+	uint gIndices[]; // Size: PASS_COUNT
+};
+
+layout(std430, binding = 3) readonly buffer bSrcKeys { SortKey gSrcKeys[]; };
+layout(std430, binding = 4) writeonly buffer bDstKeys { SortKey gDstKeys[]; };
+
+layout(std430, binding = 5) readonly buffer bSrcPayloads { SortPayload gSrcPayloads[]; };
+layout(std430, binding = 6) writeonly buffer bDstPayloads { SortPayload gDstPayloads[]; };
+
+layout(push_constant) uniform bPushConstant { uint gPassIdx, gRadixShift, gWriteKey; };
+
+// Shared Memory Layout:
+// PHASE 1: |      WAVE_HIST      |GROUP_HIST|GROUP_IDX|
+// PHASE 2: |      WAVE_HIST      |                WAVE_MASK                |
+// PHASE 3: |GROUP_OFST| WAVE_OFST|
+// PHASE 4: |                      KEYS                      |  DEVICE_OFST |
+
+#define SHARED_WAVE_HIST_SIZE (WAVES_PER_GROUP * RADIX)
+#define SHARED_GROUP_HIST_SIZE (RADIX)
+#define SHARED_GROUP_IDX_SIZE (1)
+#define SHARED_WAVE_MASK_SIZE (WAVES_PER_GROUP * RADIX * WAVE_MASK_SIZE)
+#define SHARED_DEVICE_OFFSET_SIZE (RADIX)
+
+#define SHARED_PHASE1_SIZE (SHARED_WAVE_HIST_SIZE + SHARED_GROUP_HIST_SIZE + SHARED_GROUP_IDX_SIZE)
+#define SHARED_PHASE2_SIZE (SHARED_WAVE_HIST_SIZE + SHARED_WAVE_MASK_SIZE)
+#define SHARED_PHASE3_SIZE (SHARED_WAVE_HIST_SIZE)
+#define SHARED_PHASE4_SIZE (SORT_PART_SIZE + SHARED_DEVICE_OFFSET_SIZE)
+// SHARED_PHASE3_SIZE < SHARED_PHASE1_SIZE < SHARED_PHASE2_SIZE ? SHARED_PHASE4_SIZE
+
+#define SHARED_PHASE1
+#define SHARED_PHASE2
+#define SHARED_PHASE3
+#define SHARED_PHASE4
+
+#if SHARED_PHASE2_SIZE > SHARED_PHASE4_SIZE
+shared uint gShared[SHARED_PHASE2_SIZE];
+#else
+shared uint gShared[SHARED_PHASE4_SIZE];
+#endif
+
+#define SHARED_WAVE_HIST(WAVE_IDX, DIGIT) gShared[((WAVE_IDX) * RADIX) + (DIGIT)]
+#define SHARED_GROUP_HIST(DIGIT) SHARED_WAVE_HIST(WAVES_PER_GROUP, DIGIT)
+#define SHARED_GROUP_IDX \
+	SHARED_WAVE_HIST(WAVES_PER_GROUP + 1, 0) // Not interfere with SHARED_WAVE_HIST and SHARED_GROUP_HIST
+#define SHARED_WAVE_MASK(WAVE_IDX, DIGIT, UINT_IDX) \
+	gShared[SHARED_WAVE_HIST_SIZE + ((WAVE_IDX) * WAVE_MASK_SIZE + (UINT_IDX)) * RADIX + (DIGIT)]
+#define SHARED_WAVE_OFFSET(WAVE_IDX, DIGIT) SHARED_WAVE_HIST(WAVE_IDX, DIGIT) // WAVE_IDX >= 1
+#define SHARED_GROUP_OFFSET(DIGIT) SHARED_WAVE_HIST(0, DIGIT)
+#define SHARED_DEVICE_OFFSET(DIGIT) gShared[SORT_PART_SIZE + (DIGIT)]
+#define SHARED_KEYS(IDX) gShared[IDX] // IDX < SORT_PART_SIZE
+
+uvec4 sharedWaveMaskLoad(uint waveIdx, uint histIdx) {
+	uvec4 waveMask;
+	[[unroll]] for (uint i = 0; i < WAVE_MASK_SIZE; ++i)
+		waveMask[i] = SHARED_WAVE_MASK(waveIdx, histIdx, i);
+	return waveMask;
+}
+
+void sharedWaveMaskStore(uint waveIdx, uint histIdx, uvec4 waveMask) {
+	[[unroll]] for (uint i = 0; i < WAVE_MASK_SIZE; ++i)
+		SHARED_WAVE_MASK(waveIdx, histIdx, i) = waveMask[i];
+}
+
+#define PASS_HIST(PART_IDX, DIGIT) gPassHists[((gGroupCount * gPassIdx + (PART_IDX)) * RADIX) + (DIGIT)]
+#define KEY_RADIX(KEY) extractKeyRadix((KEY), gRadixShift)
+
+uint gWaveLaneIdx, gGroupWaveIdx, gGroupThreadIdx, gGroupCount, gGroupIdx;
+
+#define Offset_T uint16_t // Offset within the threadGroup
+
+#define DEFINE_LOAD(SUFFIX, BUFFER) \
+	uint[SORT_KEYS_PER_THREAD] load##SUFFIX(uint dummy) { \
+		uint keys[SORT_KEYS_PER_THREAD]; \
+		uint firstLoadIdx = \
+		    gGroupIdx * SORT_PART_SIZE + gGroupWaveIdx * LANES_PER_WAVE * SORT_KEYS_PER_THREAD + gWaveLaneIdx; \
+		[[branch]] \
+		if (gGroupIdx < gGroupCount - 1) { \
+			[[unroll]] for (uint i = 0, t = firstLoadIdx; i < SORT_KEYS_PER_THREAD; ++i, t += LANES_PER_WAVE) \
+				keys[i] = BUFFER[t]; \
+		} else { \
+			[[unroll]] for (uint i = 0, t = firstLoadIdx; i < SORT_KEYS_PER_THREAD; ++i, t += LANES_PER_WAVE) \
+				keys[i] = t < gKeyCount ? BUFFER[t] : dummy; \
+		} \
+		return keys; \
+	}
+
+DEFINE_LOAD(Keys, gSrcKeys)
+DEFINE_LOAD(Payloads, gSrcPayloads)
+
+SHARED_PHASE1 uint countGroupHist(in const SortKey keys[SORT_KEYS_PER_THREAD]) {
+	[[unroll]] for (uint i = 0; i < SORT_KEYS_PER_THREAD; ++i)
+		atomicAdd(SHARED_GROUP_HIST(KEY_RADIX(keys[i])), 1);
+
+	barrier();
+	groupMemoryBarrier();
+
+	if (gGroupThreadIdx < RADIX)
+		return SHARED_GROUP_HIST(gGroupThreadIdx);
+	return 0;
+}
+
+SHARED_PHASE2 Offset_T[SORT_KEYS_PER_THREAD] matchKeys(in const SortKey keys[SORT_KEYS_PER_THREAD]) {
+	Offset_T waveOffsets[SORT_KEYS_PER_THREAD];
+	// Get offsets of a key among the keys with same value (wave domain)
+	// Also generate a per-wave histogram in [gGroupWaveIdx * RADIX, gGroupWaveIdx * RADIX + RADIX)
+	[[unroll]] for (uint i = 0; i < SORT_KEYS_PER_THREAD; ++i) {
+		uint keyRadix = KEY_RADIX(keys[i]);
+
+		// for example: 1 2 3 3 2
+		// keyEqualMask for the 5 lanes are: 10000, 01001, 00110, 00110, 01001
+		// lane with equal key is set to true.
+
+		// Faster match as described in
+		// https://developer.download.nvidia.com/video/gputechconf/gtc/2020/presentations/s21572-a-faster-radix-sort-implementation.pdf
+
+		// Clear needed wave mask
+		sharedWaveMaskStore(gGroupWaveIdx, keyRadix, uvec4(0));
+		subgroupBarrier();
+
+		// atomicOr wave mask
+		atomicOr(SHARED_WAVE_MASK(gGroupWaveIdx, keyRadix, gWaveLaneIdx / 32), 1 << (gWaveLaneIdx & 31));
+		subgroupBarrier();
+
+		uvec4 keyEqualMask = sharedWaveMaskLoad(gGroupWaveIdx, keyRadix);
+		uint keyLowestLaneIdx = subgroupBallotFindLSB(keyEqualMask);
+		uint keyEqualLaneCount = subgroupBallotFindLSB(keyEqualMask);
+		uint keyEqualLtLaneCount = subgroupBallotExclusiveBitCount(keyEqualMask);
+
+		uint keyOffset;
+		if (gWaveLaneIdx == keyLowestLaneIdx)
+			keyOffset = atomicAdd(SHARED_WAVE_HIST(gGroupWaveIdx, keyRadix), keyEqualLaneCount);
+		waveOffsets[i] = Offset_T(subgroupShuffle(keyOffset, keyLowestLaneIdx) + keyEqualLtLaneCount);
+	}
+	return waveOffsets;
+}
+
+SHARED_PHASE3 void scanWaveHists() {
+	// Accumulate all per-wave histograms
+	uint groupHist;
+	if (gGroupThreadIdx < RADIX) {
+		groupHist = SHARED_WAVE_HIST(0, gGroupThreadIdx);
+		[[unroll]] for (uint i = 1; i < WAVES_PER_GROUP; ++i) {
+			uint waveHist = SHARED_WAVE_HIST(i, gGroupThreadIdx);
+			SHARED_WAVE_OFFSET(i, gGroupThreadIdx) = groupHist; // Exclusive Prefix-sum for Wave Hists
+			groupHist += waveHist;
+		}
+	}
+}
+
+SHARED_PHASE3 uint scanGroupHist(uint groupHist) {
+	uint wavePrefix;
+
+	if (gGroupThreadIdx < RADIX) {
+		wavePrefix = subgroupExclusiveAdd(groupHist);
+		// Directly write wave prefix sum at the final location
+		if (gWaveLaneIdx == LANES_PER_WAVE - 1 && gGroupWaveIdx < WAVES_PER_GROUP)
+			SHARED_GROUP_OFFSET(gGroupWaveIdx * LANES_PER_WAVE) = wavePrefix + groupHist;
+	}
+	barrier();
+	groupMemoryBarrier();
+
+	if (gGroupThreadIdx < (RADIX / LANES_PER_WAVE))
+		SHARED_GROUP_OFFSET(gGroupThreadIdx * LANES_PER_WAVE) =
+		    subgroupExclusiveAdd(SHARED_GROUP_OFFSET(gGroupThreadIdx * LANES_PER_WAVE));
+
+	barrier();
+	groupMemoryBarrier();
+
+	uint groupPrefix = 0;
+	if (gGroupThreadIdx < RADIX) {
+		groupPrefix = SHARED_GROUP_OFFSET(gGroupWaveIdx * LANES_PER_WAVE);
+		if (gWaveLaneIdx > 0) {
+			groupPrefix += wavePrefix;
+			SHARED_GROUP_OFFSET(gGroupThreadIdx) = groupPrefix;
+		}
+	}
+
+	return groupPrefix;
+}
+
+uint lookbackScanPassHists() {
+	if (gGroupThreadIdx < RADIX) {
+		uint passHistPrefix = 0;
+		for (uint part = gGroupIdx; part != -1;) {
+			const uint flagPayload = PASS_HIST(part, gGroupThreadIdx);
+			if ((flagPayload & FLAG_MASK) == FLAG_INCLUSIVE) {
+				passHistPrefix += flagPayload >> 2;
+				if (gGroupIdx < gGroupCount - 1)
+					atomicAdd(PASS_HIST(gGroupIdx + 1, gGroupThreadIdx), passHistPrefix << 2 | 1);
+
+				return passHistPrefix;
+			}
+
+			if ((flagPayload & FLAG_MASK) == FLAG_REDUCTION) {
+				passHistPrefix += flagPayload >> 2;
+				--part;
+			}
+		}
+	}
+	return 0;
+}
+
+SHARED_PHASE4 void scatterShared(in const Offset_T groupOffsets[SORT_KEYS_PER_THREAD],
+                                 in const uint keys[SORT_KEYS_PER_THREAD]) {
+	[[unroll]] for (uint i = 0; i < SORT_KEYS_PER_THREAD; ++i)
+		SHARED_KEYS(uint(groupOffsets[i])) = keys[i];
+}
+
+#define DEFINE_STORE_SHARED(SUFFIX, BUFFER) \
+	void storeShared##SUFFIX(in const uint deviceOffsets[SORT_KEYS_PER_THREAD]) { \
+		uint lastGroupKeyCount = gKeyCount - (gGroupCount - 1) * SORT_PART_SIZE; \
+		[[branch]] \
+		if (gGroupIdx < gGroupCount - 1) { \
+			[[unroll]] \
+			for (uint i = 0, s = gGroupThreadIdx; i < SORT_KEYS_PER_THREAD; ++i, s += SORT_DIM) \
+				BUFFER[deviceOffsets[i] + s] = SHARED_KEYS(s); \
+		} else { \
+			[[unroll]] \
+			for (uint i = 0, s = gGroupThreadIdx; i < SORT_KEYS_PER_THREAD; ++i, s += SORT_DIM) { \
+				if (s >= lastGroupKeyCount) \
+					break; \
+				BUFFER[deviceOffsets[i] + s] = SHARED_KEYS(s); \
+			} \
+		} \
+	}
+
+SHARED_PHASE4 DEFINE_STORE_SHARED(Keys, gDstKeys);
+SHARED_PHASE4 DEFINE_STORE_SHARED(Payloads, gDstPayloads);
+
+void main() {
+	gWaveLaneIdx = gl_SubgroupInvocationID;
+	gGroupWaveIdx = gl_SubgroupID; // groupThreadID.x / LANES_PER_WAVE;
+	gGroupThreadIdx = gGroupWaveIdx * LANES_PER_WAVE + gWaveLaneIdx;
+	gGroupCount = gl_NumWorkGroups.x;
+
+	SHARED_PHASE1
+	// Clear WAVE_HIST and GROUP_HIST
+	for (uint i = gGroupThreadIdx; i < SHARED_WAVE_HIST_SIZE + SHARED_GROUP_HIST_SIZE; i += SORT_DIM)
+		gShared[i] = 0;
+	if (gGroupThreadIdx == 0)
+		SHARED_GROUP_IDX = atomicAdd(gIndices[gPassIdx], 1);
+
+	barrier();
+	groupMemoryBarrier();
+	gGroupIdx = SHARED_GROUP_IDX;
+
+	SortKey keys[SORT_KEYS_PER_THREAD] = loadKeys(0xFFFFFFFF);
+
+	// Count group hist eariler to reduce blocking of decoupled look-back as described in
+	// https://developer.download.nvidia.com/video/gputechconf/gtc/2020/presentations/s21572-a-faster-radix-sort-implementation.pdf
+	uint groupHist = countGroupHist(keys);
+	// Set FLAG_REDUCTION and data to next partition(group), for decoupled look-back
+	if (gGroupThreadIdx < RADIX && gGroupIdx < gGroupCount - 1)
+		atomicAdd(PASS_HIST(gGroupIdx + 1, gGroupThreadIdx), groupHist << 2 | FLAG_REDUCTION);
+
+	barrier();
+	groupMemoryBarrier(); // End of SHARED_PHASE1
+
+	SHARED_PHASE2
+	// WAVE_HIST[0, ..., WAVES_PER_GROUP) are computed, along with waveOffsets
+	Offset_T offsets[SORT_KEYS_PER_THREAD] = matchKeys(keys);
+
+	barrier();
+	groupMemoryBarrier(); // End of SHARED_PHASE2
+
+	SHARED_PHASE3
+	// WAVE_HIST[1, ..., WAVES_PER_GROUP) are scanned (exclusive prefix sum), WAVE_HIST[0] is left unused
+	// WAVE_HIST[1, ..., WAVES_PER_GROUP) -> WAVE_OFFSET[1, ..., WAVES_PER_GROUP)
+	scanWaveHists();
+
+	barrier();
+	groupMemoryBarrier(); // WAVE_HIST[0]/GROUP_OFFSET: READ -> READ/WRITE, WAVE_HIST[1..]/WAVE_OFFSET:
+	                      // WRITE -> READ
+
+	// WAVE_HIST[0] -> GROUP_OFFSET
+	uint groupHistPrefix = scanGroupHist(groupHist);
+	barrier();
+	groupMemoryBarrier(); // WAVE_HIST[0]/GROUP_OFFSET: WRITE -> READ
+
+	// Adjust offsets
+	// waveOffsets -> groupOffsets
+	[[branch]]
+	if (gGroupWaveIdx > 0) {
+		[[unroll]]
+		for (uint i = 0; i < SORT_KEYS_PER_THREAD; ++i) //
+			offsets[i] += Offset_T(SHARED_WAVE_OFFSET(gGroupWaveIdx, KEY_RADIX(keys[i])) +
+			                       SHARED_GROUP_OFFSET(KEY_RADIX(keys[i])));
+	} else {
+		[[unroll]]
+		for (uint i = 0; i < SORT_KEYS_PER_THREAD; ++i) //
+			offsets[i] += Offset_T(SHARED_GROUP_OFFSET(KEY_RADIX(keys[i])));
+	}
+
+	barrier();
+	groupMemoryBarrier(); // End of SHARED_PHASE3
+
+	SHARED_PHASE4
+	// Scatter keys to shared memory (to make the final memory write ordered, utilizing GPU write coalescing)
+	scatterShared(offsets, keys);
+	uint passHistPrefix = lookbackScanPassHists();
+	if (gGroupThreadIdx < RADIX)
+		SHARED_DEVICE_OFFSET(gGroupThreadIdx) = passHistPrefix - groupHistPrefix;
+	// minus groupHistPrefix so that SHARED_KEYS(s) -> DST(SHARED_DEVICE_OFFSET + s)
+
+	barrier();
+	groupMemoryBarrier(); // SHARED_KEYS, SHARED_DEVICE_OFFSET: WRITE -> READ
+
+	// Remap and fetch deviceOffsets
+	uint deviceOffsets[SORT_KEYS_PER_THREAD];
+	[[unroll]] for (uint i = 0, s = gGroupThreadIdx; i < SORT_KEYS_PER_THREAD; ++i, s += SORT_DIM)
+		deviceOffsets[i] = SHARED_DEVICE_OFFSET(KEY_RADIX(SHARED_KEYS(s)));
+
+	if (bool(gWriteKey))
+		storeSharedKeys(deviceOffsets);
+
+	barrier();
+	groupMemoryBarrier(); // SHARED_KEYS: READ -> WRITE
+	scatterShared(offsets, loadPayloads(0));
+	barrier();
+	groupMemoryBarrier(); // SHARED_KEYS: WRITE -> READ
+	storeSharedPayloads(deviceOffsets);
+	// End of SHARED_PHASE4
+}

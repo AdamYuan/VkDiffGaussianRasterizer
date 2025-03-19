@@ -1,0 +1,19 @@
+#ifndef DEVICE_SORTER_SIZE_GLSL
+#define DEVICE_SORTER_SIZE_GLSL
+
+#define PASS_COUNT 4
+#define BITS_PER_PASS 8
+#define RADIX (1 << BITS_PER_PASS)
+
+#define KEY_COUNT_BUFFER_OFFSET 2
+
+// Global Histogram
+#define GLOBAL_HIST_DIM 128
+#define GLOBAL_HIST_PART_SIZE (GLOBAL_HIST_DIM * RADIX)
+
+// OneSweep Sort
+#define SORT_DIM RADIX
+#define SORT_KEYS_PER_THREAD 15
+#define SORT_PART_SIZE (SORT_DIM * SORT_KEYS_PER_THREAD)
+
+#endif
