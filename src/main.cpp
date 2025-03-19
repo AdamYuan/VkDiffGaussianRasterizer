@@ -1,12 +1,15 @@
 #include <myvk/FrameManager.hpp>
 #include <myvk/GLFWHelper.hpp>
 #include <myvk/ImGuiHelper.hpp>
+#include <myvk/ImGuiRenderer.hpp>
 #include <myvk/Instance.hpp>
 #include <myvk/Queue.hpp>
+#include <myvk/QueueSelector.hpp>
 
 constexpr uint32_t kFrameCount = 3;
 
 bool cursor_captured = false;
+
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
 	if (action != GLFW_PRESS)
 		return;
@@ -21,7 +24,7 @@ int main() {
 	glfwSetKeyCallback(window, key_callback);
 
 	myvk::Ptr<myvk::Device> device;
-	myvk::Ptr<myvk::Queue> generic_queue, sparse_queue;
+	myvk::Ptr<myvk::Queue> generic_queue;
 	myvk::Ptr<myvk::PresentQueue> present_queue;
 	{
 		auto instance = myvk::Instance::CreateWithGlfwExtensions();
@@ -30,7 +33,7 @@ int main() {
 		auto features = physical_device->GetDefaultFeatures();
 		features.vk12.samplerFilterMinmax = VK_TRUE;
 		device = myvk::Device::Create(physical_device,
-		                              GPSQueueSelector{&generic_queue, &sparse_queue, surface, &present_queue},
+		                              myvk::GenericPresentQueueSelector{&generic_queue, surface, &present_queue},
 		                              features, {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_SWAPCHAIN_EXTENSION_NAME});
 	}
 

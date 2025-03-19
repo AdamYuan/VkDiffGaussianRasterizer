@@ -32,4 +32,4 @@ void DeviceSorter::Resource::update(const myvk::Ptr<myvk::Device> &pDevice, uint
 	makeBuffer(pIndirectBuffer, 6, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
 }
 
-}
+} // namespace VkGSRaster

@@ -4,11 +4,11 @@
 
 #pragma once
 
+#include <array>
 #include <myvk/BufferBase.hpp>
 #include <myvk/ComputePipeline.hpp>
 #include <myvk/DescriptorPool.hpp>
 #include <myvk/DescriptorSet.hpp>
-#include <array>
 
 namespace VkGSRaster {
 
@@ -30,10 +30,6 @@ public:
 
 private:
 	myvk::Ptr<myvk::ComputePipeline> mpResetPipeline, mpGlobalHistPipeline, mpScanHistPipeline, mpOneSweepPipeline;
-	myvk::Ptr<myvk::DescriptorSet> mpResetDescriptorSet, mpGlobalHistDescriptorSet, mpScanHistDescriptorSet;
-	std::array<myvk::Ptr<myvk::DescriptorSet>, >
-
-
 };
 
-}
+} // namespace VkGSRaster
