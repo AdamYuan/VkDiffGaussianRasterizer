@@ -141,7 +141,7 @@ SHARED_PHASE2 Offset_T[SORT_KEYS_PER_THREAD] matchKeys(in const SortKey keys[SOR
 
 		uvec4 keyEqualMask = sharedWaveMaskLoad(gGroupWaveIdx, keyRadix);
 		uint keyLowestLaneIdx = subgroupBallotFindLSB(keyEqualMask);
-		uint keyEqualLaneCount = subgroupBallotFindLSB(keyEqualMask);
+		uint keyEqualLaneCount = subgroupBallotBitCount(keyEqualMask);
 		uint keyEqualLtLaneCount = subgroupBallotExclusiveBitCount(keyEqualMask);
 
 		uint keyOffset;
