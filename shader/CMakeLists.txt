@@ -58,7 +58,6 @@ endfunction()
 
 # Device Sorter
 add_shader_library(DeviceSorter)
-add_library(shader::DeviceSorter ALIAS shader_DeviceSorter)
 
 export_shader(DeviceSorter DeviceSorter/DeviceSorterSize.glsl DeviceSorter/DeviceSorterSize.hpp)
 function(add_DeviceSorter_shader INPUT_FILE OUTPUT_FILE OPTIONS)
