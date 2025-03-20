@@ -31,24 +31,25 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release")
 endif ()
 
 add_subdirectory(dep/MyVK)
-add_subdirectory(dep/glm)
+# add_subdirectory(dep/glm)
 
 add_subdirectory(shader)
 
 add_executable(VkDiffGaussianRasterizer
         src/main.cpp
 
-        src/Rasterizer.cpp
         src/Rasterizer.hpp
+        src/Rasterizer.cpp
 
-        src/ForwardRasterizer.cpp
         src/ForwardRasterizer.hpp
+        src/ForwardRasterizer.cpp
 
-        src/DeviceSorter.cpp
         src/DeviceSorter.hpp
+        src/DeviceSorter.cpp
+        src/DeviceSorterShader.cpp
 )
 target_link_libraries(VkDiffGaussianRasterizer PRIVATE
-        myvk::vulkan myvk::glfw myvk::imgui myvk::rg
-        glm::glm
+        myvk::vulkan myvk::glfw myvk::imgui # myvk::rg
+        # glm::glm
         shader
 )

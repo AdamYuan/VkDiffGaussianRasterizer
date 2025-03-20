@@ -30,11 +30,19 @@ public:
 		float tanFovX, tanFovY;
 	};
 
+	struct InputArgSyncState {
+
+	};
+
 	struct OutputArgs {
 		myvk::Ptr<myvk::BufferBase> pSortedIDBuffer;    // P * [uint]
 		myvk::Ptr<myvk::BufferBase> pQuadBuffer;        // P * [float2x2]
 		myvk::Ptr<myvk::BufferBase> pDrawArgBuffer;     // uint4
 		myvk::Ptr<myvk::BufferBase> pDispatchArgBuffer; // uint3
+	};
+
+	struct OutputArgSyncState {
+
 	};
 };
 

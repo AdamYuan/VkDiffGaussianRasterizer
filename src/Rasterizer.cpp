@@ -16,6 +16,9 @@ const auto createDeviceQueue =
 	myvk::Ptr<myvk::PhysicalDevice> pPhysicalDevice = physicalDeviceSelectFunc(pPhysicalDevices);
 	auto features = pPhysicalDevice->GetDefaultFeatures();
 	features.vk13.synchronization2 = VK_TRUE;
+	features.vk13.computeFullSubgroups = VK_TRUE;
+	features.vk13.subgroupSizeControl = VK_TRUE;
+	features.vk14.pushDescriptor = VK_TRUE;
 	myvk::Ptr<myvk::Queue> pQueue;
 	auto pDevice = myvk::Device::Create(pPhysicalDevice, myvk::GenericQueueSelector{&pQueue}, features,
 	                                    {VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME});

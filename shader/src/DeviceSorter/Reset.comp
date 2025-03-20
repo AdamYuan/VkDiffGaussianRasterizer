@@ -4,16 +4,10 @@
 // 256 * 256 threads
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
-layout(std430, binding = 1) buffer bIndirectArgs { uint gIndirectArgs[]; };
+layout(std430, binding = B_INDIRECT_ARGS_BINDING) writeonly buffer bIndirectArgs { uint gIndirectArgs[]; };
 
-layout(std430, binding = 2) buffer bGlobalHists {
-	uint gGlobalHists[]; // Size: RADIX * PASS_COUNT
-};
-layout(std430, binding = 3) buffer bPassHists {
+layout(std430, binding = B_PASS_HISTS_BINDING) writeonly buffer bPassHists {
 	uint gPassHists[]; // Size: divCeil(gKeyCount, SORT_PART_SIZE) * RADIX * PASS_COUNT
-};
-layout(std430, binding = 4) buffer bIndices {
-	uint gIndices[]; // Size: PASS_COUNT
 };
 
 void main() {
@@ -28,10 +22,4 @@ void main() {
 
 	for (uint i = threadIdx, end = sortGroupCount * PASS_COUNT * RADIX; i < end; i += 256 * 256)
 		gPassHists[i] = 0;
-
-	if (threadIdx < PASS_COUNT * RADIX)
-		gGlobalHists[threadIdx] = 0;
-
-	if (threadIdx < PASS_COUNT)
-		gIndices[threadIdx] = 0;
 }

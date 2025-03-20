@@ -7,7 +7,7 @@
 #define SortKey uint
 #define SortPayload uint
 
-layout(binding = 0) uniform bKeyCount {
+layout(binding = B_KEY_COUNT_BINDING) uniform bKeyCount {
 	uint _padding[KEY_COUNT_BUFFER_OFFSET];
 	uint gKeyCount;
 };
