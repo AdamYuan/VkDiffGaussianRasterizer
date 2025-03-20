@@ -134,7 +134,7 @@ int main() {
 
 	std::mt19937 randGen{std::random_device{}()};
 
-	uint32_t failCount = 0;
+	uint32_t failCount = 0, keyCount = kMaxSortKeyCount;
 
 	while (!glfwWindowShouldClose(pWindow)) {
 		glfwPollEvents();
@@ -143,6 +143,8 @@ int main() {
 			myvk::ImGuiNewFrame();
 
 			ImGui::Begin("Info");
+			ImGui::DragInt("Key Count", reinterpret_cast<int *>(&keyCount), 1, 0, kMaxSortKeyCount);
+			keyCount = std::min(keyCount, kMaxSortKeyCount);
 			ImGui::Text("Fail Count: %d", failCount);
 			ImGui::End();
 
@@ -153,7 +155,6 @@ int main() {
 			uint32_t currentFrame = pFrameManager->GetCurrentFrame();
 			const auto &pCommandBuffer = pFrameManager->GetCurrentCommandBuffer();
 
-			uint32_t keyCount = kMaxSortKeyCount;
 			uint32_t *pMappedCount = pMappedCounts[currentFrame];
 			const auto &pCountBuffer = pCountBuffers[currentFrame];
 			uint32_t *pMappedFail = pMappedFails[currentFrame];
