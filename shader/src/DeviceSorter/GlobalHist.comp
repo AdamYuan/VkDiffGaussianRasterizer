@@ -18,7 +18,7 @@ layout(std430, binding = B_GLOBAL_HISTS_BINDING) buffer bGlobalHists {
 shared uint gShared[SHARED_HIST_SIZE]; // Shared memory for GlobalHistogram
 
 void main() {
-	uint groupThreadIdx = gl_GlobalInvocationID.x, groupIdx = gl_WorkGroupID.x, groupCount = gl_NumWorkGroups.x;
+	uint groupThreadIdx = gl_LocalInvocationID.x, groupIdx = gl_WorkGroupID.x, groupCount = gl_NumWorkGroups.x;
 
 	// Clear shared memory
 	for (uint i = groupThreadIdx; i < SHARED_HIST_SIZE; i += GLOBAL_HIST_DIM)
