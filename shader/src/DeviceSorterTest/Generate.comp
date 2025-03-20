@@ -1,0 +1,23 @@
+#version 460
+
+#include "Size.glsl"
+
+layout(local_size_x = GENERATE_DIM, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 0) writeonly buffer bKeys { uint gKeys[]; };
+layout(push_constant) uniform bPushConstant { uint gKeyCount, gSeed; };
+
+uint pcg(uint v) {
+	uint state = v * 747796405u + 2891336453u;
+	uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+	return (word >> 22u) ^ word;
+}
+
+void main() {
+	uint idx = gl_GlobalInvocationID.x;
+
+	if (idx >= gKeyCount)
+		return;
+
+	gKeys[idx] = pcg(idx + gSeed);
+}

@@ -58,7 +58,6 @@ endfunction()
 
 # Device Sorter
 add_shader_library(DeviceSorter)
-
 export_shader(DeviceSorter DeviceSorter/DeviceSorterSize.glsl DeviceSorter/DeviceSorterSize.hpp)
 function(add_DeviceSorter_shader INPUT_FILE OUTPUT_FILE OPTIONS)
     add_shader(DeviceSorter DeviceSorter/${INPUT_FILE} DeviceSorter/${OUTPUT_FILE} "${OPTIONS}")
@@ -72,3 +71,9 @@ add_DeviceSorter_shader(ScanHist.comp ScanHist32.comp.inl "-O;-DLANES_PER_WAVE=3
 add_DeviceSorter_shader(ScanHist.comp ScanHist64.comp.inl "-O;-DLANES_PER_WAVE=64")
 add_DeviceSorter_shader(OneSweep.comp OneSweep32.comp.inl "-O;-DLANES_PER_WAVE=32")
 add_DeviceSorter_shader(OneSweep.comp OneSweep64.comp.inl "-O;-DLANES_PER_WAVE=64")
+
+# Device Sorter Test
+add_shader_library(DeviceSorterTest)
+add_shader(DeviceSorterTest DeviceSorterTest/Generate.comp DeviceSorterTest/Generate.comp.inl "-O")
+add_shader(DeviceSorterTest DeviceSorterTest/Validate.comp DeviceSorterTest/Validate.comp.inl "-O")
+export_shader(DeviceSorterTest DeviceSorterTest/Size.glsl DeviceSorterTest/Size.hpp)

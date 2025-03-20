@@ -1,0 +1,35 @@
+#version 460
+
+#include "Size.glsl"
+
+layout(local_size_x = VALIDATE_DIM, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 0) readonly buffer bKeys { uint gKeys[]; };
+layout(std430, binding = 1) buffer bFail { uint gFail[]; };
+layout(push_constant) uniform bPushConstant { uint gKeyCount; };
+
+shared uint gSharedKeys[VALIDATE_DIM + 1];
+shared uint gSharedFail;
+
+uint loadKey(uint idx) { return idx < gKeyCount ? gKeys[idx] : 0xFFFFFFFF; }
+
+void main() {
+	uint threadIdx = gl_GlobalInvocationID.x, groupThreadIdx = gl_LocalInvocationID.x;
+
+	gSharedKeys[groupThreadIdx] = loadKey(threadIdx);
+	if (groupThreadIdx + 1 == VALIDATE_DIM)
+		gSharedKeys[VALIDATE_DIM] = loadKey(threadIdx + 1);
+	gSharedFail = 0;
+
+	barrier();
+	groupMemoryBarrier();
+
+	if (gSharedKeys[groupThreadIdx] > gSharedKeys[groupThreadIdx + 1])
+		atomicOr(gSharedFail, 1);
+
+	barrier();
+	groupMemoryBarrier();
+
+	if (gSharedFail == 1)
+		atomicOr(gFail[0], 1);
+}

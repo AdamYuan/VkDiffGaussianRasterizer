@@ -64,4 +64,5 @@ add_executable(DeviceSorterTest
 target_link_libraries(DeviceSorterTest PRIVATE
         myvk::vulkan myvk::glfw myvk::imgui
         shader::DeviceSorter
+        shader::DeviceSorterTest
 )
