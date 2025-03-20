@@ -84,24 +84,28 @@ DeviceSorter::DeviceSorter(const myvk::Ptr<myvk::Device> &pDevice) {
 	         .descriptorCount = 1u,
 	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
 	    },
-	    VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT);
+	    VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR);
 
+	// Pipeline layouts
 	mpPipelineLayout = myvk::PipelineLayout::Create(pDevice, {pDescriptorSetLayout}, {});
+
+	mpOneSweepPipelineLayout = myvk::PipelineLayout::Create(
+	    pDevice, {pDescriptorSetLayout},
+	    {{.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = (uint32_t)sizeof(OneSweepPushConstant)}});
+
+	// Pipelines
 	mpResetPipeline = myvk::ComputePipeline::Create(mpPipelineLayout, createResetShader(pDevice));
 	mpGlobalHistPipeline = myvk::ComputePipeline::Create(mpPipelineLayout, createGlobalHistShader(pDevice));
 	mpScanHistPipeline = myvk::ComputePipeline::Create(
 	    mpPipelineLayout, createScanHistShader(pDevice)->GetPipelineShaderStageCreateInfo(
 	                          VK_SHADER_STAGE_COMPUTE_BIT, VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT));
-	mpOneSweepPipelineLayout = myvk::PipelineLayout::Create(
-	    pDevice, {pDescriptorSetLayout},
-	    {{.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = (uint32_t)sizeof(OneSweepPushConstant)}});
 	mpOneSweepPipeline = myvk::ComputePipeline::Create(
 	    mpOneSweepPipelineLayout,
 	    createOneSweepShader(pDevice)->GetPipelineShaderStageCreateInfo(
 	        VK_SHADER_STAGE_COMPUTE_BIT, VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT));
 }
-DeviceSorter::RWArgsSyncState DeviceSorter::GetSrcRWArgsSync() {
-	return {
+const DeviceSorter::RWArgsSyncState &DeviceSorter::GetSrcRWArgsSync() {
+	static constexpr RWArgsSyncState kSync = {
 	    .keyBuffer =
 	        {
 	            .stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -113,9 +117,10 @@ DeviceSorter::RWArgsSyncState DeviceSorter::GetSrcRWArgsSync() {
 	            .access_mask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
 	        },
 	};
+	return kSync;
 }
-DeviceSorter::RWArgsSyncState DeviceSorter::GetDstRWArgsSync() {
-	return {
+const DeviceSorter::RWArgsSyncState &DeviceSorter::GetDstRWArgsSync() {
+	static constexpr RWArgsSyncState kSync = {
 	    .keyBuffer =
 	        {
 	            .stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -127,34 +132,46 @@ DeviceSorter::RWArgsSyncState DeviceSorter::GetDstRWArgsSync() {
 	            .access_mask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
 	        },
 	};
+	return kSync;
 }
-DeviceSorter::ROArgsSyncState DeviceSorter::GetROArgsSync() {
-	return {.countBuffer = {
-	            .stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-	            .access_mask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
-	        }};
+const DeviceSorter::ROArgsSyncState &DeviceSorter::GetROArgsSync() {
+	static constexpr ROArgsSyncState kSync = {.countBuffer = {
+	                                              .stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+	                                              .access_mask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+	                                          }};
+	return kSync;
+}
+
+const DeviceSorter::ArgsUsage &DeviceSorter::GetArgsUsage() {
+	static constexpr ArgsUsage kUsage = {
+	    .countBuffer = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+	    .keyBuffer = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+	    .payloadBuffer = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+	};
+	return kUsage;
 }
 
 void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const ROArgs &roArgs,
-                              const RWArgs &rwArgs, const Resource &resource) const {
+                              const RWArgs &rwArgs, const Resource &resource, bool keyAsPayload) const {
 	myvk::Ptr<myvk::BufferBase> pSrcKeyBuffer = rwArgs.pKeyBuffer, pSrcPayloadBuffer = rwArgs.pPayloadBuffer;
 	myvk::Ptr<myvk::BufferBase> pDstKeyBuffer = resource.pTempKeyBuffer,
 	                            pDstPayloadBuffer = resource.pTempPayloadBuffer;
 
+	const std::vector kInitialDescriptorSetWrites = {
+	    myvk::DescriptorSetWrite::WriteUniformBuffer(nullptr, roArgs.pCountBuffer, B_KEY_COUNT_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pIndirectBuffer, B_INDIRECT_ARGS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pGlobalHistBuffer, B_GLOBAL_HISTS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pPassHistBuffer, B_PASS_HISTS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pIndexBuffer, B_INDICES_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, pSrcKeyBuffer, B_SRC_KEYS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, pSrcPayloadBuffer, B_SRC_PAYLOADS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, pDstKeyBuffer, B_DST_KEYS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, pDstPayloadBuffer, B_DST_PAYLOADS_BINDING),
+	};
+
 	// Since all pipeline layouts are compatible, we only need to bind the majority of buffers once
-	pCommandBuffer->CmdPushDescriptorSet(
-	    mpPipelineLayout, VK_PIPELINE_BIND_POINT_COMPUTE, 0,
-	    {
-	        myvk::DescriptorSetWrite::WriteUniformBuffer(nullptr, roArgs.pCountBuffer, B_KEY_COUNT_BINDING),
-	        myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pIndirectBuffer, B_INDIRECT_ARGS_BINDING),
-	        myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pGlobalHistBuffer, B_GLOBAL_HISTS_BINDING),
-	        myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pPassHistBuffer, B_PASS_HISTS_BINDING),
-	        myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pIndexBuffer, B_INDICES_BINDING),
-	        myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, pSrcKeyBuffer, B_SRC_KEYS_BINDING),
-	        myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, pSrcPayloadBuffer, B_SRC_PAYLOADS_BINDING),
-	        myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, pDstKeyBuffer, B_DST_KEYS_BINDING),
-	        myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, pDstPayloadBuffer, B_DST_PAYLOADS_BINDING),
-	    });
+	pCommandBuffer->CmdPushDescriptorSet(mpPipelineLayout, VK_PIPELINE_BIND_POINT_COMPUTE, 0,
+	                                     kInitialDescriptorSetWrites);
 
 	// vkCmdFillBuffer is a clear command, so use VK_PIPELINE_STAGE_2_CLEAR_BIT
 	pCommandBuffer->CmdPipelineBarrier2(
@@ -272,9 +289,12 @@ void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuff
 
 		pCommandBuffer->CmdPipelineBarrier2({}, bufferMemoryBarriers, {});
 
-		if (passIdx > 0) {
+		if (passIdx == 0) {
+			pCommandBuffer->CmdPushDescriptorSet(mpOneSweepPipelineLayout, VK_PIPELINE_BIND_POINT_COMPUTE, 0,
+			                                     kInitialDescriptorSetWrites);
+		} else {
 			pCommandBuffer->CmdPushDescriptorSet(
-			    mpPipelineLayout, VK_PIPELINE_BIND_POINT_COMPUTE, 0,
+			    mpOneSweepPipelineLayout, VK_PIPELINE_BIND_POINT_COMPUTE, 0,
 			    {
 			        myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, pSrcKeyBuffer, B_SRC_KEYS_BINDING),
 			        myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, pSrcPayloadBuffer, B_SRC_PAYLOADS_BINDING),
@@ -286,7 +306,7 @@ void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuff
 		OneSweepPushConstant pcData = {
 		    .passIdx = passIdx,
 		    .radixShift = passIdx * BITS_PER_PASS,
-		    .writeKey = uint32_t(passIdx < PASS_COUNT - 1),
+		    .writeKey = uint32_t(keyAsPayload || passIdx < PASS_COUNT - 1),
 		};
 		pCommandBuffer->CmdPushConstants(mpOneSweepPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
 		                                 sizeof(OneSweepPushConstant), &pcData);

@@ -5,7 +5,7 @@
 #define BITS_PER_PASS 8
 #define RADIX (1 << BITS_PER_PASS)
 
-#define KEY_COUNT_BUFFER_OFFSET 2
+#define KEY_COUNT_BUFFER_OFFSET (2 * 4)
 
 // Global Histogram
 #define GLOBAL_HIST_DIM 128

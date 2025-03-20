@@ -28,6 +28,11 @@ public:
 		myvk::BufferSyncState keyBuffer, payloadBuffer;
 	};
 
+	struct ArgsUsage {
+		VkBufferUsageFlags countBuffer;
+		VkBufferUsageFlags keyBuffer, payloadBuffer;
+	};
+
 	struct Resource {
 		myvk::Ptr<myvk::BufferBase> pTempKeyBuffer, pTempPayloadBuffer; // count * [uint]
 		myvk::Ptr<myvk::BufferBase> pGlobalHistBuffer;
@@ -51,12 +56,19 @@ public:
 	DeviceSorter() = default;
 	explicit DeviceSorter(const myvk::Ptr<myvk::Device> &pDevice);
 
-	static RWArgsSyncState GetSrcRWArgsSync(); // RWArgs must be visible to GetSrcRWArgsSync() before CmdExecute()
-	static RWArgsSyncState GetDstRWArgsSync(); // RWArgs' later access must make GetDstRWArgsSync() available
-	static ROArgsSyncState GetROArgsSync();    // ROArgs must be visible to GetROArgsSync() before CmdExecute()
-
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const ROArgs &roArgs, const RWArgs &rwArgs,
-	                const Resource &resource) const;
+	                const Resource &resource, bool keyAsPayload = false) const;
+
+	// RWArgs must be visible to GetSrcRWArgsSync() before CmdExecute()
+	static const RWArgsSyncState &GetSrcRWArgsSync();
+
+	// RWArgs' later access must make GetDstRWArgsSync() available
+	static const RWArgsSyncState &GetDstRWArgsSync();
+
+	// ROArgs must be visible to GetROArgsSync() before CmdExecute()
+	static const ROArgsSyncState &GetROArgsSync();
+
+	static const ArgsUsage &GetArgsUsage();
 };
 
 } // namespace VkGSRaster

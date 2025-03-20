@@ -7,10 +7,7 @@
 #define SortKey uint
 #define SortPayload uint
 
-layout(binding = B_KEY_COUNT_BINDING) uniform bKeyCount {
-	uint _padding[KEY_COUNT_BUFFER_OFFSET];
-	uint gKeyCount;
-};
+layout(binding = B_KEY_COUNT_BINDING) uniform bKeyCount { layout(offset = KEY_COUNT_BUFFER_OFFSET) uint gKeyCount; };
 
 uint divCeil(uint x, uint y) { return (x + y - 1) / y; }
 uint getSortPartCount() { return divCeil(gKeyCount, SORT_PART_SIZE); }
