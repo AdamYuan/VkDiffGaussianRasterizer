@@ -51,5 +51,17 @@ add_executable(VkDiffGaussianRasterizer
 target_link_libraries(VkDiffGaussianRasterizer PRIVATE
         myvk::vulkan myvk::glfw myvk::imgui # myvk::rg
         # glm::glm
-        shader
+        shader::DeviceSorter
+)
+
+add_executable(DeviceSorterTest
+        src/DeviceSorterTest.cpp
+
+        src/DeviceSorter.hpp
+        src/DeviceSorter.cpp
+        src/DeviceSorterShader.cpp
+)
+target_link_libraries(DeviceSorterTest PRIVATE
+        myvk::vulkan myvk::glfw myvk::imgui
+        shader::DeviceSorter
 )
