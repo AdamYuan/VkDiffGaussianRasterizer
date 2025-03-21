@@ -35,34 +35,43 @@ add_subdirectory(dep/MyVK)
 
 add_subdirectory(shader)
 
-add_executable(VkDiffGaussianRasterizer
-        src/main.cpp
-
-        src/Rasterizer.hpp
-        src/Rasterizer.cpp
-
-        src/ForwardRasterizer.hpp
-        src/ForwardRasterizer.cpp
-
+add_library(VkGSRaster_DeviceSorter STATIC
         src/DeviceSorter.hpp
         src/DeviceSorter.cpp
         src/DeviceSorterShader.cpp
 )
-target_link_libraries(VkDiffGaussianRasterizer PRIVATE
-        myvk::vulkan myvk::glfw myvk::imgui # myvk::rg
-        # glm::glm
+add_library(VkGSRaster::DeviceSorter ALIAS VkGSRaster_DeviceSorter)
+target_link_libraries(VkGSRaster_DeviceSorter PUBLIC
+        myvk::vulkan
         shader::DeviceSorter
+)
+
+add_library(VkGSRaster_Rasterizer STATIC
+        src/Rasterizer.hpp
+        src/Rasterizer.cpp
+)
+add_library(VkGSRaster::Rasterizer ALIAS VkGSRaster_Rasterizer)
+target_link_libraries(VkGSRaster_Rasterizer PUBLIC
+        myvk::vulkan
+        VkGSRaster::DeviceSorter
+)
+
+add_executable(VkDiffGaussianRasterizer
+        src/main.cpp
+
+        src/Context.hpp
+        src/Context.cpp
+)
+target_link_libraries(VkDiffGaussianRasterizer PRIVATE
+        myvk::vulkan myvk::glfw myvk::imgui
+        VkGSRaster::DeviceSorter
 )
 
 add_executable(DeviceSorterTest
         src/DeviceSorterTest.cpp
-
-        src/DeviceSorter.hpp
-        src/DeviceSorter.cpp
-        src/DeviceSorterShader.cpp
 )
 target_link_libraries(DeviceSorterTest PRIVATE
         myvk::vulkan myvk::glfw myvk::imgui
-        shader::DeviceSorter
+        VkGSRaster::DeviceSorter
         shader::DeviceSorterTest
 )
