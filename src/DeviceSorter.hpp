@@ -40,7 +40,7 @@ public:
 		myvk::Ptr<myvk::BufferBase> pIndexBuffer;
 		myvk::Ptr<myvk::BufferBase> pIndirectBuffer;
 
-		void update(const myvk::Ptr<myvk::Device> &pDevice, uint32_t count, double growFactor = 1.5f);
+		void update(const myvk::Ptr<myvk::Device> &pDevice, uint32_t count, double growFactor = 1.5);
 	};
 
 private:
