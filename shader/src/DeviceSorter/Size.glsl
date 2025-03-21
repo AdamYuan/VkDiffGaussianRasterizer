@@ -7,6 +7,10 @@
 
 #define KEY_COUNT_BUFFER_OFFSET (2 * 4)
 
+// Reset
+#define RESET_DIM 256
+#define RESET_GROUP_COUNT 256
+
 // Global Histogram
 #define GLOBAL_HIST_DIM RADIX
 #define GLOBAL_HIST_KEYS_PER_THREAD 45

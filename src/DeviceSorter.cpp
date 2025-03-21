@@ -29,12 +29,9 @@ void DeviceSorter::Resource::update(const myvk::Ptr<myvk::Device> &pDevice, uint
 	growBuffer(pTempPayloadBuffer, count, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 	growBuffer(pPassHistBuffer, PASS_COUNT * RADIX * ((count + SORT_PART_SIZE - 1) / SORT_PART_SIZE),
 	           VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-	makeBuffer(pGlobalHistBuffer, PASS_COUNT * RADIX,
-	           VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-	makeBuffer(pIndexBuffer, PASS_COUNT, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-	makeBuffer(pIndirectBuffer, 6,
-	           VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-	               VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+	makeBuffer(pGlobalHistBuffer, PASS_COUNT * RADIX, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+	makeBuffer(pIndexBuffer, PASS_COUNT, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+	makeBuffer(pIndirectBuffer, 6, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
 }
 
 namespace {
@@ -173,45 +170,36 @@ void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuff
 	pCommandBuffer->CmdPushDescriptorSet(mpPipelineLayout, VK_PIPELINE_BIND_POINT_COMPUTE, 0,
 	                                     kInitialDescriptorSetWrites);
 
-	// vkCmdFillBuffer is a clear command, so use VK_PIPELINE_STAGE_2_CLEAR_BIT
-	pCommandBuffer->CmdPipelineBarrier2(
-	    {},
-	    {
-	        resource.pIndirectBuffer->GetMemoryBarrier2(
-	            {.stage_mask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT, .access_mask = 0},
-	            {.stage_mask = VK_PIPELINE_STAGE_2_CLEAR_BIT, .access_mask = VK_ACCESS_2_TRANSFER_WRITE_BIT}),
-	        resource.pIndexBuffer->GetMemoryBarrier2(
-	            {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, .access_mask = 0},
-	            {.stage_mask = VK_PIPELINE_STAGE_2_CLEAR_BIT, .access_mask = VK_ACCESS_2_TRANSFER_WRITE_BIT}),
-	        resource.pGlobalHistBuffer->GetMemoryBarrier2(
-	            {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, .access_mask = 0},
-	            {.stage_mask = VK_PIPELINE_STAGE_2_CLEAR_BIT, .access_mask = VK_ACCESS_2_TRANSFER_WRITE_BIT}),
-	    },
-	    {});
-	// Fill IndirectBuffer to 1s
-	vkCmdFillBuffer(pCommandBuffer->GetHandle(), resource.pIndirectBuffer->GetHandle(), 0, 6 * sizeof(uint32_t), 1u);
-	// Clear IndexBuffer and GlobalHistBuffer to 0s
-	vkCmdFillBuffer(pCommandBuffer->GetHandle(), resource.pIndexBuffer->GetHandle(), 0, PASS_COUNT * sizeof(uint32_t),
-	                0u);
-	vkCmdFillBuffer(pCommandBuffer->GetHandle(), resource.pGlobalHistBuffer->GetHandle(), 0,
-	                PASS_COUNT * RADIX * sizeof(uint32_t), 0u);
-
 	// Reset Pass
 	pCommandBuffer->CmdPipelineBarrier2(
 	    {},
 	    {
 	        resource.pIndirectBuffer->GetMemoryBarrier2(
-	            {.stage_mask = VK_PIPELINE_STAGE_2_CLEAR_BIT, .access_mask = VK_ACCESS_2_TRANSFER_WRITE_BIT},
+	            // Prev-Access is READ
+	            {.stage_mask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT, .access_mask = 0},
 	            {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 	             .access_mask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
-	        resource.pPassHistBuffer->GetMemoryBarrier2({.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-	                                                     .access_mask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
-	                                                    {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-	                                                     .access_mask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
+	        resource.pGlobalHistBuffer->GetMemoryBarrier2(
+	            // Prev-Access is READ
+	            {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, .access_mask = 0}, // Last access is READ
+	            {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+	             .access_mask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
+	        resource.pIndexBuffer->GetMemoryBarrier2(
+	            // Prev-Access is WRITE
+	            {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+	             .access_mask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	            {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+	             .access_mask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
+	        resource.pPassHistBuffer->GetMemoryBarrier2(
+	            // Prev-Access is WRITE
+	            {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+	             .access_mask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	            {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+	             .access_mask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
 	    },
 	    {});
 	pCommandBuffer->CmdBindPipeline(mpResetPipeline);
-	pCommandBuffer->CmdDispatch(256, 1, 1);
+	pCommandBuffer->CmdDispatch(RESET_GROUP_COUNT, 1, 1);
 
 	// GlobalHist Pass
 	pCommandBuffer->CmdPipelineBarrier2(
@@ -222,7 +210,8 @@ void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuff
 	                                                    {.stage_mask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
 	                                                     .access_mask = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT}),
 	        resource.pGlobalHistBuffer->GetMemoryBarrier2(
-	            {.stage_mask = VK_PIPELINE_STAGE_2_CLEAR_BIT, .access_mask = VK_ACCESS_2_TRANSFER_WRITE_BIT},
+	            {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+	             .access_mask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
 	            {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 	             .access_mask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
 	    },
@@ -250,11 +239,6 @@ void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuff
 	// OneSweep Passes
 	pCommandBuffer->CmdBindPipeline(mpOneSweepPipeline);
 	for (uint32_t passIdx = 0; passIdx < PASS_COUNT; ++passIdx) {
-		auto srcIndexBufferSync = passIdx == 0
-		                              ? myvk::BufferSyncState{.stage_mask = VK_PIPELINE_STAGE_2_CLEAR_BIT,
-		                                                      .access_mask = VK_ACCESS_2_TRANSFER_WRITE_BIT}
-		                              : myvk::BufferSyncState{.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-		                                                      .access_mask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT};
 		std::vector bufferMemoryBarriers = {
 		    resource.pPassHistBuffer->GetMemoryBarrier2(
 		        {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -262,13 +246,17 @@ void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuff
 		        {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 		         .access_mask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
 		    resource.pIndexBuffer->GetMemoryBarrier2(
-		        srcIndexBufferSync,
+		        {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+		         .access_mask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
 		        {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 		         .access_mask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
-		    pDstKeyBuffer->GetMemoryBarrier2({.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, .access_mask = 0},
-		                                     {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-		                                      .access_mask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
+		    pDstKeyBuffer->GetMemoryBarrier2(
+		        // Prev-Access is READ
+		        {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, .access_mask = 0},
+		        {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+		         .access_mask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
 		    pDstPayloadBuffer->GetMemoryBarrier2(
+		        // Prev-Access is READ
 		        {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, .access_mask = 0},
 		        {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 		         .access_mask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),

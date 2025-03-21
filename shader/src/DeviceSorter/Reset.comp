@@ -1,25 +1,48 @@
 #version 460
 #include "Common.glsl"
 
-// 256 * 256 threads
-layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+#define RESET_THREAD_COUNT (RESET_DIM * RESET_GROUP_COUNT)
+
+layout(local_size_x = RESET_DIM, local_size_y = 1, local_size_z = 1) in;
 
 layout(std430, binding = B_INDIRECT_ARGS_BINDING) writeonly buffer bIndirectArgs { uint gIndirectArgs[]; };
 
 layout(std430, binding = B_PASS_HISTS_BINDING) writeonly buffer bPassHists {
 	uint gPassHists[]; // Size: divCeil(gKeyCount, SORT_PART_SIZE) * RADIX * PASS_COUNT
 };
+layout(std430, binding = B_INDICES_BINDING) writeonly buffer bIndices {
+	uint gIndices[]; // Size: PASS_COUNT
+#if RESET_THREAD_COUNT < PASS_COUNT
+#error
+#endif
+};
+layout(std430, binding = B_GLOBAL_HISTS_BINDING) writeonly buffer bGlobalHists {
+	uint gGlobalHists[]; // Size: RADIX * PASS_COUNT
+#if RESET_THREAD_COUNT < (RADIX * PASS_COUNT)
+#error
+#endif
+};
 
 void main() {
-	uint threadIdx = gl_GlobalInvocationID.x;
+	uint threadIdx = gl_GlobalInvocationID.x, groupIdx = gl_WorkGroupID.x;
 
 	uint sortGroupCount = getSortPartCount();
 
 	if (threadIdx == 0) {
 		gIndirectArgs[0] = divCeil(gKeyCount, GLOBAL_HIST_PART_SIZE);
+		gIndirectArgs[1] = 1;
+		gIndirectArgs[2] = 1;
 		gIndirectArgs[3] = sortGroupCount;
+		gIndirectArgs[4] = 1;
+		gIndirectArgs[5] = 1;
 	}
 
-	for (uint i = threadIdx, end = sortGroupCount * PASS_COUNT * RADIX; i < end; i += 256 * 256)
+	if (threadIdx < PASS_COUNT)
+		gIndices[threadIdx] = 0;
+
+	if (threadIdx < PASS_COUNT * RADIX)
+		gGlobalHists[threadIdx] = 0;
+
+	for (uint i = threadIdx, end = sortGroupCount * (PASS_COUNT * RADIX); i < end; i += RESET_THREAD_COUNT)
 		gPassHists[i] = 0;
 }
