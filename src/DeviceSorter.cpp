@@ -31,7 +31,7 @@ void DeviceSorter::Resource::update(const myvk::Ptr<myvk::Device> &pDevice, uint
 	           VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 	makeBuffer(pGlobalHistBuffer, PASS_COUNT * RADIX, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 	makeBuffer(pIndexBuffer, PASS_COUNT, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-	makeBuffer(pIndirectBuffer, 6, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+	makeBuffer(pDispatchArgBuffer, 6, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
 }
 
 namespace {
@@ -48,7 +48,7 @@ DeviceSorter::DeviceSorter(const myvk::Ptr<myvk::Device> &pDevice) {
 	         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 	         .descriptorCount = 1u,
 	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
-	        {.binding = B_INDIRECT_ARGS_BINDING,
+	        {.binding = B_DISPATCH_ARGS_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 	         .descriptorCount = 1u,
 	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
@@ -156,7 +156,7 @@ void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuff
 
 	const std::vector kInitialDescriptorSetWrites = {
 	    myvk::DescriptorSetWrite::WriteUniformBuffer(nullptr, roArgs.pCountBuffer, B_KEY_COUNT_BINDING),
-	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pIndirectBuffer, B_INDIRECT_ARGS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pDispatchArgBuffer, B_DISPATCH_ARGS_BINDING),
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pGlobalHistBuffer, B_GLOBAL_HISTS_BINDING),
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pPassHistBuffer, B_PASS_HISTS_BINDING),
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pIndexBuffer, B_INDICES_BINDING),
@@ -174,7 +174,7 @@ void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuff
 	pCommandBuffer->CmdPipelineBarrier2(
 	    {},
 	    {
-	        resource.pIndirectBuffer->GetMemoryBarrier2(
+	        resource.pDispatchArgBuffer->GetMemoryBarrier2(
 	            // Prev-Access is READ
 	            {.stage_mask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT, .access_mask = 0},
 	            {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -205,7 +205,7 @@ void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuff
 	pCommandBuffer->CmdPipelineBarrier2(
 	    {},
 	    {
-	        resource.pIndirectBuffer->GetMemoryBarrier2({.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+	        resource.pDispatchArgBuffer->GetMemoryBarrier2({.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 	                                                     .access_mask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
 	                                                    {.stage_mask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
 	                                                     .access_mask = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT}),
@@ -217,7 +217,7 @@ void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuff
 	    },
 	    {});
 	pCommandBuffer->CmdBindPipeline(mpGlobalHistPipeline);
-	pCommandBuffer->CmdDispatchIndirect(resource.pIndirectBuffer, 0 * sizeof(uint32_t));
+	pCommandBuffer->CmdDispatchIndirect(resource.pDispatchArgBuffer, 0 * sizeof(uint32_t));
 
 	// ScanHist Pass
 	pCommandBuffer->CmdPipelineBarrier2(
@@ -298,7 +298,7 @@ void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuff
 		};
 		pCommandBuffer->CmdPushConstants(mpOneSweepPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
 		                                 sizeof(OneSweepPushConstant), &pcData);
-		pCommandBuffer->CmdDispatchIndirect(resource.pIndirectBuffer, 3 * sizeof(uint32_t));
+		pCommandBuffer->CmdDispatchIndirect(resource.pDispatchArgBuffer, 3 * sizeof(uint32_t));
 
 		std::swap(pSrcKeyBuffer, pDstKeyBuffer);
 		std::swap(pSrcPayloadBuffer, pDstPayloadBuffer);
