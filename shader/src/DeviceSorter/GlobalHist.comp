@@ -9,16 +9,25 @@ layout(std430, binding = B_GLOBAL_HISTS_BINDING) buffer bGlobalHists {
 	uint gGlobalHists[]; // Size: RADIX * PASS_COUNT
 };
 
-#define HISTS_PER_GROUP 2
-
-#define SHARED_HIST_SIZE (HISTS_PER_GROUP * PASS_COUNT * RADIX)
-#define SHARED_PASS_HIST(PASS_IDX, HIST_IDX, DIGIT) \
-	gShared[((PASS_IDX) * HISTS_PER_GROUP + (HIST_IDX)) * RADIX + (DIGIT)]
+#define SHARED_HIST_SIZE (PASS_COUNT * RADIX)
+#define SHARED_PASS_HIST(PASS_IDX, DIGIT) gShared[(PASS_IDX) * RADIX + (DIGIT)]
 
 shared uint gShared[SHARED_HIST_SIZE]; // Shared memory for GlobalHistogram
 
 void main() {
 	uint groupThreadIdx = gl_LocalInvocationID.x, groupIdx = gl_WorkGroupID.x, groupCount = gl_NumWorkGroups.x;
+
+	SortKey keys[GLOBAL_HIST_KEYS_PER_THREAD];
+
+	uint firstLoadIdx = groupIdx * GLOBAL_HIST_PART_SIZE + groupThreadIdx;
+
+	[[branch]] if (groupIdx < groupCount - 1) {
+		[[unroll]] for (uint i = 0, t = firstLoadIdx; i < GLOBAL_HIST_KEYS_PER_THREAD; ++i, t += GLOBAL_HIST_DIM)
+			keys[i] = gSrcKeys[t];
+	} else {
+		[[unroll]] for (uint i = 0, t = firstLoadIdx; i < GLOBAL_HIST_KEYS_PER_THREAD; ++i, t += GLOBAL_HIST_DIM)
+			keys[i] = t < gKeyCount ? gSrcKeys[t] : 0xFFFFFFFF;
+	}
 
 	// Clear shared memory
 	for (uint i = groupThreadIdx; i < SHARED_HIST_SIZE; i += GLOBAL_HIST_DIM)
@@ -27,30 +36,24 @@ void main() {
 	barrier();
 	groupMemoryBarrier();
 
-	// Counting
-	for (uint i = groupIdx * GLOBAL_HIST_PART_SIZE + groupThreadIdx,
-	          histID = groupThreadIdx / (GLOBAL_HIST_DIM / HISTS_PER_GROUP),
-	          end = groupIdx == groupCount - 1 ? gKeyCount : (groupIdx + 1) * GLOBAL_HIST_PART_SIZE;
-	     i < end; i += GLOBAL_HIST_DIM) {
-		SortKey key = gSrcKeys[i];
-
-		[[unroll]] for (uint passID = 0; passID < PASS_COUNT; ++passID) {
-			uint radix = extractKeyRadix(key, passID * BITS_PER_PASS);
-			atomicAdd(SHARED_PASS_HIST(passID, histID, radix), 1);
+	[[unroll]] for (uint keyIdx = 0; keyIdx < GLOBAL_HIST_KEYS_PER_THREAD; ++keyIdx) {
+		uint key = keys[keyIdx];
+		[[unroll]] for (uint passIdx = 0; passIdx < PASS_COUNT; ++passIdx) {
+			uint radix = extractKeyRadix(key, passIdx * BITS_PER_PASS);
+			atomicAdd(SHARED_PASS_HIST(passIdx, radix), 1);
 		}
 	}
 
 	barrier();
 	groupMemoryBarrier();
 
-	// Reduce and write
-	for (uint i = groupThreadIdx; i < RADIX; i += GLOBAL_HIST_DIM) {
-		[[unroll]] for (uint passID = 0; passID < PASS_COUNT; ++passID) {
-			uint sum = SHARED_PASS_HIST(passID, 0, i);
-			[[unroll]] for (uint histID = 1; histID < HISTS_PER_GROUP; ++histID)
-				sum += SHARED_PASS_HIST(passID, histID, i);
+	if (groupThreadIdx < RADIX - 1) {
+		// ` < RADIX - 1` since the last radix is useless after exculsive prefix-sum
+		[[unroll]] for (uint passIdx = 0; passIdx < PASS_COUNT; ++passIdx) {
+			uint passHist = SHARED_PASS_HIST(passIdx, groupThreadIdx);
 
-			atomicAdd(gGlobalHists[RADIX * passID + i], sum);
+			if (passHist > 0)
+				atomicAdd(gGlobalHists[RADIX * passIdx + groupThreadIdx], passHist);
 		}
 	}
 }
