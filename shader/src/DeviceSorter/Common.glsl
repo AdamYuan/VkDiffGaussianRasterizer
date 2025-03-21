@@ -1,7 +1,7 @@
 #ifndef DEVICE_SORTER_GLSL
 #define DEVICE_SORTER_GLSL
 
-#include "DeviceSorterSize.glsl"
+#include "Size.glsl"
 
 // Key Types
 #define SortKey uint

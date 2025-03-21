@@ -7,7 +7,7 @@
 #include <array>
 #include <myvk/Buffer.hpp>
 #include <myvk/DescriptorSetLayout.hpp>
-#include <shader/DeviceSorter/DeviceSorterSize.hpp>
+#include <shader/DeviceSorter/Size.hpp>
 
 namespace VkGSRaster {
 

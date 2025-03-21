@@ -10,7 +10,7 @@
 #include <myvk/Queue.hpp>
 #include <myvk/QueueSelector.hpp>
 
-#include <shader/DeviceSorter/DeviceSorterSize.hpp>
+#include <shader/DeviceSorter/Size.hpp>
 #include <shader/DeviceSorterTest/Size.hpp>
 
 constexpr uint32_t kFrameCount = 3;

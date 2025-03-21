@@ -1,8 +1,8 @@
 #version 460
 #extension GL_KHR_shader_subgroup_ballot : require
 #extension GL_KHR_shader_subgroup_arithmetic : require
-#include "DeviceSorter.glsl"
-#include "DeviceSorterWave.glsl"
+#include "Common.glsl"
+#include "Wave.glsl"
 
 layout(local_size_x = RADIX, local_size_y = 1, local_size_z = 1) in;
 

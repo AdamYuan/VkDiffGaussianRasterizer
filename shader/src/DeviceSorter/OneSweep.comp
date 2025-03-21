@@ -5,8 +5,8 @@
 #extension GL_KHR_shader_subgroup_shuffle : require
 #extension GL_KHR_shader_subgroup_arithmetic : require
 #extension GL_EXT_control_flow_attributes : require
-#include "DeviceSorter.glsl"
-#include "DeviceSorterWave.glsl"
+#include "Common.glsl"
+#include "Wave.glsl"
 
 layout(local_size_x = SORT_DIM, local_size_y = 1, local_size_z = 1) in;
 
