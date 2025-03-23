@@ -981,8 +981,11 @@ SplatViewGeom bwd_splatViewGeom2alpha(SplatViewGeom splatViewGeom_1, vec2 fragCo
 	s_bwd_splatViewGeom2alpha_0(dp_1, fragCoord_2, camera_5, dL_dalpha_0);
 	return dp_1.differential_0;
 }
-bool behindFrustum(Splat splat_2, Camera camera_6) {
-	return ((((splat_2.geom.mean - camera_6.pos) * (camera_6.viewMat))).z) < 0.20000000298023224;
+bool behindFrustum(Splat splat_2, Camera camera_6, out float o_viewMeanZ_0) {
+	float _S356 = (((splat_2.geom.mean - camera_6.pos) * (camera_6.viewMat))).z;
+	o_viewMeanZ_0 = _S356;
+	return _S356 < 0.20000000298023224;
 }
 bool inFrustum(SplatViewGeom splatViewGeom_2, SplatQuad splatQuad_0, Camera camera_7) { return true; }
+float opacity2quadBound(float opacity) { return sqrt(2.0 * (5.54126358032226562 + log(opacity))); }
 #endif

@@ -200,9 +200,10 @@ SplatViewGeom bwd_splatViewGeom2alpha(SplatViewGeom splatViewGeom, float2 fragCo
 }
 
 [noinline]
-bool behindFrustum(Splat splat, Camera camera) {
+bool behindFrustum(Splat splat, Camera camera, out float o_viewMeanZ) {
 	float3 camMean = splat.geom.mean - camera.pos;
 	float3 viewMean = mul(camera.viewMat, camMean);
+	o_viewMeanZ = viewMean.z;
 	return viewMean.z < 0.2;
 }
 
@@ -210,4 +211,10 @@ bool behindFrustum(Splat splat, Camera camera) {
 bool inFrustum(SplatViewGeom splatViewGeom, SplatQuad splatQuad, Camera camera) {
 	// TODO: Implement this
 	return true;
+}
+
+[noinline]
+float opacity2quadBound(float opacity) {
+	// assert(opacity > 0)
+	return sqrt(2.0 * (ALPHA_LOG_INV_MIN + log(opacity)));
 }

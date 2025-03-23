@@ -38,6 +38,7 @@ keywords=(
 	"bwd_splatViewGeom2alpha"
 	"behindFrustum"
 	"inFrustum"
+	"opacity2quadBound"
 )
 for keyword in "${keywords[@]}"; do
     sed -i "s/\\<${keyword}_[0-9]\\>/${keyword}/g" Math.glsl
