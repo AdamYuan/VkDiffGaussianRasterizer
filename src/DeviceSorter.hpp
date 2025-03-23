@@ -44,7 +44,7 @@ public:
 	};
 
 private:
-	myvk::Ptr<myvk::PipelineLayout> mpPipelineLayout, mpOneSweepPipelineLayout;
+	myvk::Ptr<myvk::PipelineLayout> mpPipelineLayout;
 	myvk::Ptr<myvk::ComputePipeline> mpResetPipeline, mpGlobalHistPipeline, mpScanHistPipeline, mpOneSweepPipeline;
 
 	static myvk::Ptr<myvk::ShaderModule> createResetShader(const myvk::Ptr<myvk::Device> &pDevice);
