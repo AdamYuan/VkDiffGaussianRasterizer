@@ -3,7 +3,7 @@
 #include "Size.glsl"
 
 struct SH : IDifferentiable {
-	float3 data[(SH_DEGREE + 1) * (SH_DEGREE + 1)];
+	float3 data[SH_SIZE];
 };
 
 struct SplatGeom : IDifferentiable {
@@ -34,9 +34,9 @@ struct SplatQuad {
 
 struct Camera {
 	float3 pos;
-	float focalX, focalY;
-	float4x4 viewMat, projMat;
-	uint width, height;
+	float2 focal;
+	float3x3 viewMat;
+	uint2 resolution;
 };
 
 [Differentiable]
@@ -139,22 +139,21 @@ SplatQuad cov2quad(float3 cov) {
 
 [noinline]
 [Differentiable]
-SplatView splat2splatView(Splat splat, no_diff float3 camPos, no_diff float3x3 camViewMat, no_diff float2 camFocal,
-                          no_diff float2 camResolution, no_diff out SplatQuad o_splatQuad) {
-	float3 camMean = splat.geom.mean - camPos;
-	float3 viewMean = mul(camViewMat, camMean);
+SplatView splat2splatView(Splat splat, no_diff Camera camera, no_diff out SplatQuad o_splatQuad) {
+	float3 camMean = splat.geom.mean - camera.pos;
+	float3 viewMean = mul(camera.viewMat, camMean);
 
 	float invViewMeanZ = 1.0 / viewMean.z;
 
-	float2 projMean = viewMean.xy * camFocal * invViewMeanZ;
-	float2 camHalfRes = camResolution * 0.5;
+	float2 projMean = viewMean.xy * camera.focal * invViewMeanZ;
+	float2 camHalfRes = float2(camera.resolution) * 0.5;
 	float2 clampedProjMean = clamp(projMean, -1.3 * camHalfRes, 1.3 * camHalfRes);
 
 	float3x3 S = scale2matrix(splat.geom.scale);
 	float3x3 R = quat2matrix(splat.geom.quat);
-	float3x3 W = camViewMat;
-	float3x3 J = float3x3(float3(camFocal.x * invViewMeanZ, 0, -clampedProjMean.x * invViewMeanZ), //
-	                      float3(0, camFocal.y * invViewMeanZ, -clampedProjMean.y * invViewMeanZ), //
+	float3x3 W = camera.viewMat;
+	float3x3 J = float3x3(float3(camera.focal.x * invViewMeanZ, 0, -clampedProjMean.x * invViewMeanZ), //
+	                      float3(0, camera.focal.y * invViewMeanZ, -clampedProjMean.y * invViewMeanZ), //
 	                      float3(0, 0, 0));
 
 	float3x3 JWRS = mul(mul(J, W), mul(R, S));
@@ -175,18 +174,16 @@ SplatView splat2splatView(Splat splat, no_diff float3 camPos, no_diff float3x3 c
 }
 
 [noinline]
-Splat bwd_splat2splatView(Splat splat, float3 camPos, float3x3 camViewMat, float2 camFocal, float2 camResolution,
-                          SplatView dL_dsplatView) {
+Splat bwd_splat2splatView(Splat splat, Camera camera, SplatView dL_dsplatView) {
 	var dp = diffPair(splat);
-	SplatQuad splatQuad;
-	bwd_diff(splat2splatView)(dp, camPos, camViewMat, camFocal, camResolution, dL_dsplatView);
+	bwd_diff(splat2splatView)(dp, camera, dL_dsplatView);
 	return dp.d;
 }
 
 [noinline]
 [Differentiable]
-float splatViewGeom2alpha(SplatViewGeom splatViewGeom, no_diff float2 fragCoord, no_diff float camHeight) {
-	float2 pos2D = float2(fragCoord.x, camHeight - fragCoord.y);
+float splatViewGeom2alpha(SplatViewGeom splatViewGeom, no_diff float2 fragCoord, no_diff Camera camera) {
+	float2 pos2D = float2(fragCoord.x, float(camera.resolution.y) - fragCoord.y);
 	float2 x2D = pos2D - splatViewGeom.mean2D;
 
 	float power = -0.5 * (splatViewGeom.conic.x * x2D.x * x2D.x + splatViewGeom.conic.z * x2D.y * x2D.y) //
@@ -196,21 +193,21 @@ float splatViewGeom2alpha(SplatViewGeom splatViewGeom, no_diff float2 fragCoord,
 }
 
 [noinline]
-SplatViewGeom bwd_splatViewGeom2alpha(SplatViewGeom splatViewGeom, float2 fragCoord, float camHeight, float dL_dalpha) {
+SplatViewGeom bwd_splatViewGeom2alpha(SplatViewGeom splatViewGeom, float2 fragCoord, Camera camera, float dL_dalpha) {
 	var dp = diffPair(splatViewGeom);
-	bwd_diff(splatViewGeom2alpha)(dp, fragCoord, camHeight, dL_dalpha);
+	bwd_diff(splatViewGeom2alpha)(dp, fragCoord, camera, dL_dalpha);
 	return dp.d;
 }
 
 [noinline]
-bool behindFrustum(Splat splat, float3 camPos, float3x3 camViewMat) {
-	float3 camMean = splat.geom.mean - camPos;
-	float3 viewMean = mul(camViewMat, camMean);
+bool behindFrustum(Splat splat, Camera camera) {
+	float3 camMean = splat.geom.mean - camera.pos;
+	float3 viewMean = mul(camera.viewMat, camMean);
 	return viewMean.z < 0.2;
 }
 
 [noinline]
-bool inFrustum(float2 splatMean2D, SplatQuad splatQuad, float2 camResolution) {
+bool inFrustum(float2 splatMean2D, SplatQuad splatQuad, Camera camera) {
 	// TODO: Implement this
 	return true;
 }

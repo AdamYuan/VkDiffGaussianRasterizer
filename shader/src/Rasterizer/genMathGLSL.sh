@@ -9,6 +9,11 @@ sed -i '/void main()/,$d' Math.glsl # Remove main() function
 
 # Remove suffix in struct and function names
 keywords=(
+	"Camera"
+	"pos"
+	"focal"
+	"viewMat"
+	"resolution"
 	"SH" 
 	"data" 
 	"SplatGeom" 
