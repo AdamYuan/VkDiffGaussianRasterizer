@@ -981,4 +981,8 @@ SplatViewGeom bwd_splatViewGeom2alpha(SplatViewGeom splatViewGeom_1, vec2 fragCo
 	s_bwd_splatViewGeom2alpha_0(dp_1, fragCoord_2, camera_5, dL_dalpha_0);
 	return dp_1.differential_0;
 }
+bool behindFrustum(Splat splat_2, Camera camera_6) {
+	return ((((splat_2.geom.mean - camera_6.pos) * (camera_6.viewMat))).z) < 0.20000000298023224;
+}
+bool inFrustum(SplatViewGeom splatViewGeom_2, SplatQuad splatQuad_0, Camera camera_7) { return true; }
 #endif

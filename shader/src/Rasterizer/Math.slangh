@@ -207,7 +207,7 @@ bool behindFrustum(Splat splat, Camera camera) {
 }
 
 [noinline]
-bool inFrustum(float2 splatMean2D, SplatQuad splatQuad, Camera camera) {
+bool inFrustum(SplatViewGeom splatViewGeom, SplatQuad splatQuad, Camera camera) {
 	// TODO: Implement this
 	return true;
 }
