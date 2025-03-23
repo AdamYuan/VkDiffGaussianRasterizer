@@ -30,11 +30,7 @@ void main() {
 
 	if (threadIdx == 0) {
 		gDispatchArgs[0] = divCeil(gKeyCount, GLOBAL_HIST_PART_SIZE);
-		gDispatchArgs[1] = 1;
-		gDispatchArgs[2] = 1;
 		gDispatchArgs[3] = sortGroupCount;
-		gDispatchArgs[4] = 1;
-		gDispatchArgs[5] = 1;
 	}
 
 	if (threadIdx < PASS_COUNT)

@@ -20,8 +20,9 @@ void DeviceSorter::Resource::update(const myvk::Ptr<myvk::Device> &pDevice, uint
 	                             PASS_COUNT * RADIX * ((count + SORT_PART_SIZE - 1) / SORT_PART_SIZE), growFactor);
 	MakeBuffer<sizeof(uint32_t)>(pDevice, pGlobalHistBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, PASS_COUNT * RADIX);
 	MakeBuffer<sizeof(uint32_t)>(pDevice, pIndexBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, PASS_COUNT);
-	MakeBuffer<sizeof(uint32_t)>(pDevice, pDispatchArgBuffer,
-	                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, 6);
+	MakeBuffer<sizeof(uint32_t)>(
+	    pDevice, pDispatchArgBuffer,
+	    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, 6);
 }
 
 namespace {
@@ -140,6 +141,11 @@ void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuff
 	myvk::Ptr<myvk::BufferBase> pSrcKeyBuffer = rwArgs.pKeyBuffer, pSrcPayloadBuffer = rwArgs.pPayloadBuffer;
 	myvk::Ptr<myvk::BufferBase> pDstKeyBuffer = resource.pTempKeyBuffer,
 	                            pDstPayloadBuffer = resource.pTempPayloadBuffer;
+
+	if (!resource.isDispatchArgBufferInitialized) {
+		resource.isDispatchArgBufferInitialized = true;
+		CmdInitializeBuffer(pCommandBuffer, resource.pDispatchArgBuffer, std::array<uint32_t, 6>{0, 1, 1, 0, 1, 1});
+	}
 
 	// Since all pipelines share the same layout, we only need to bind the majority of buffers once
 	pCommandBuffer->CmdPushDescriptorSet(
