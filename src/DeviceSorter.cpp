@@ -4,6 +4,8 @@
 
 #include "DeviceSorter.hpp"
 
+#include "ResourceUtil.hpp"
+
 #include <array>
 #include <myvk/Buffer.hpp>
 #include <myvk/DescriptorSetLayout.hpp>
@@ -12,26 +14,14 @@
 namespace VkGSRaster {
 
 void DeviceSorter::Resource::update(const myvk::Ptr<myvk::Device> &pDevice, uint32_t count, double growFactor) {
-	const auto growBuffer = [&pDevice, growFactor](myvk::Ptr<myvk::BufferBase> &pBuffer, uint32_t targetUintCount,
-	                                               VkBufferUsageFlags bufferUsage) {
-		if (pBuffer == nullptr || pBuffer->GetSize() < targetUintCount * sizeof(uint32_t)) {
-			VkDeviceSize allocSize = pBuffer ? VkDeviceSize(double(pBuffer->GetSize()) * growFactor) : 0;
-			allocSize = std::max(allocSize, targetUintCount * sizeof(uint32_t));
-			pBuffer = myvk::Buffer::Create(pDevice, allocSize, 0, bufferUsage);
-		}
-	};
-	const auto makeBuffer = [&pDevice](myvk::Ptr<myvk::BufferBase> &pBuffer, uint32_t uintCount,
-	                                   VkBufferUsageFlags bufferUsage) {
-		if (pBuffer == nullptr)
-			pBuffer = myvk::Buffer::Create(pDevice, uintCount * sizeof(uint32_t), 0, bufferUsage);
-	};
-	growBuffer(pTempKeyBuffer, count, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-	growBuffer(pTempPayloadBuffer, count, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-	growBuffer(pPassHistBuffer, PASS_COUNT * RADIX * ((count + SORT_PART_SIZE - 1) / SORT_PART_SIZE),
-	           VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-	makeBuffer(pGlobalHistBuffer, PASS_COUNT * RADIX, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-	makeBuffer(pIndexBuffer, PASS_COUNT, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-	makeBuffer(pDispatchArgBuffer, 6, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+	growBuffer<sizeof(uint32_t)>(pDevice, pTempKeyBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, count, growFactor);
+	growBuffer<sizeof(uint32_t)>(pDevice, pTempPayloadBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, count, growFactor);
+	growBuffer<sizeof(uint32_t)>(pDevice, pPassHistBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+	                             PASS_COUNT * RADIX * ((count + SORT_PART_SIZE - 1) / SORT_PART_SIZE), growFactor);
+	makeBuffer<sizeof(uint32_t)>(pDevice, pGlobalHistBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, PASS_COUNT * RADIX);
+	makeBuffer<sizeof(uint32_t)>(pDevice, pIndexBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, PASS_COUNT);
+	makeBuffer<sizeof(uint32_t)>(pDevice, pDispatchArgBuffer,
+	                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, 6);
 }
 
 namespace {
@@ -206,9 +196,9 @@ void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuff
 	    {},
 	    {
 	        resource.pDispatchArgBuffer->GetMemoryBarrier2({.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-	                                                     .access_mask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
-	                                                    {.stage_mask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
-	                                                     .access_mask = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT}),
+	                                                        .access_mask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	                                                       {.stage_mask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
+	                                                        .access_mask = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT}),
 	        resource.pGlobalHistBuffer->GetMemoryBarrier2(
 	            {.stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 	             .access_mask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
