@@ -181,6 +181,12 @@ Splat bwd_splat2splatView(Splat splat, Camera camera, SplatView dL_dsplatView) {
 }
 
 [noinline]
+float quadPos2alpha(float2 quadPos, float opacity) {
+	float power = -0.5 * dot(quadPos, quadPos);
+	return opacity * exp(power);
+}
+
+[noinline]
 [Differentiable]
 float splatViewGeom2alpha(SplatViewGeom splatViewGeom, no_diff float2 fragCoord, no_diff Camera camera) {
 	float2 pos2D = float2(fragCoord.x, float(camera.resolution.y) - fragCoord.y);
@@ -217,4 +223,20 @@ bool inFrustum(SplatViewGeom splatViewGeom, SplatQuad splatQuad, Camera camera) 
 float opacity2quadBound(float opacity) {
 	// assert(opacity > 0)
 	return sqrt(2.0 * (ALPHA_LOG_INV_MIN + log(opacity)));
+}
+
+[noinline]
+float2 pos2D2clip(float2 pos, Camera camera) {
+	pos = float(camera.resolution.y) - pos.y;
+	pos = pos * (1.0 / float2(camera.resolution));
+	pos = pos * 2.0 - 1.0;
+	return pos;
+}
+
+[noinline]
+float2 axis2D2clip(float2 axis, Camera camera) {
+	axis.y = -axis.y;
+	axis = axis * (1.0 / float2(camera.resolution));
+	axis = axis * 2.0;
+	return axis;
 }

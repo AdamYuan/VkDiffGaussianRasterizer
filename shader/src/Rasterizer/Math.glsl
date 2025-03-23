@@ -988,4 +988,15 @@ bool behindFrustum(Splat splat_2, Camera camera_6, out float o_viewMeanZ_0) {
 }
 bool inFrustum(SplatViewGeom splatViewGeom_2, SplatQuad splatQuad_0, Camera camera_7) { return true; }
 float opacity2quadBound(float opacity) { return sqrt(2.0 * (5.54126358032226562 + log(opacity))); }
+vec2 pos2D2clip(vec2 pos, Camera camera_8) {
+	return vec2(float(camera_8.resolution.y) - pos.y) * (1.0 / vec2(camera_8.resolution)) * 2.0 - 1.0;
+}
+vec2 axis2D2clip(vec2 axis_0, Camera camera_9) {
+	vec2 _S357 = axis_0;
+	_S357[1] = -axis_0.y;
+	vec2 _S358 = _S357 * (1.0 / vec2(camera_9.resolution)) * 2.0;
+	_S357 = _S358;
+	return _S358;
+}
+float quadPos2alpha(vec2 quadPos_0, float opacity) { return opacity * exp(-0.5 * dot(quadPos_0, quadPos_0)); }
 #endif

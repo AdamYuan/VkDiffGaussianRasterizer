@@ -4,6 +4,7 @@ RWStructuredBuffer<SplatView> gSplatViews;
 RWStructuredBuffer<SplatQuad> gSplatQuads;
 RWStructuredBuffer<Splat> gSplats;
 RWStructuredBuffer<float> gAlphas;
+RWStructuredBuffer<float2> g2Ds;
 RWStructuredBuffer<bool> gBools;
 
 uniform Camera gCamera;
@@ -17,4 +18,7 @@ void main() {
 	gBools[0] = behindFrustum(gSplats[0], gCamera, gAlphas[10]);
 	gBools[1] = inFrustum(gSplatViews[0].geom, gSplatQuads[0], gCamera);
 	gAlphas[3] = opacity2quadBound(gAlphas[23]);
+	g2Ds[0] = pos2D2clip(g2Ds[1], gCamera);
+	g2Ds[3] = axis2D2clip(g2Ds[4], gCamera);
+	gAlphas[22] = quadPos2alpha(g2Ds[12], gAlphas[23]);
 }

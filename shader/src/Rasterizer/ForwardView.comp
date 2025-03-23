@@ -20,6 +20,10 @@ uint float2CmpUint(float f) {
 
 void main() {
 	uint splatIdx = gl_GlobalInvocationID.x;
+
+	if (splatIdx >= gSplatCount)
+		return;
+
 	Splat splat = loadSplat(splatIdx);
 	Camera camera = loadCamera();
 

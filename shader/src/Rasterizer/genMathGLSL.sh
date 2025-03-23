@@ -39,6 +39,9 @@ keywords=(
 	"behindFrustum"
 	"inFrustum"
 	"opacity2quadBound"
+	"pos2D2clip"
+	"axis2D2clip"
+	"quadPos2alpha"
 )
 for keyword in "${keywords[@]}"; do
     sed -i "s/\\<${keyword}_[0-9]\\>/${keyword}/g" Math.glsl
