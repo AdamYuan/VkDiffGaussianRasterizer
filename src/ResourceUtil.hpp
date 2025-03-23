@@ -11,7 +11,7 @@
 namespace VkGSRaster {
 
 template <VkDeviceSize ElementSize_V>
-inline void growBuffer(const myvk::Ptr<myvk::Device> &pDevice, myvk::Ptr<myvk::BufferBase> &pBuffer,
+inline void GrowBuffer(const myvk::Ptr<myvk::Device> &pDevice, myvk::Ptr<myvk::BufferBase> &pBuffer,
                        VkBufferUsageFlags bufferUsage, uint32_t elementCount, double growFactor) {
 	if (pBuffer == nullptr || pBuffer->GetSize() < elementCount * ElementSize_V) {
 		VkDeviceSize allocSize = pBuffer ? VkDeviceSize(double(pBuffer->GetSize()) * growFactor) : 0;
@@ -21,7 +21,7 @@ inline void growBuffer(const myvk::Ptr<myvk::Device> &pDevice, myvk::Ptr<myvk::B
 }
 
 template <VkDeviceSize ElementSize_V>
-inline void makeBuffer(const myvk::Ptr<myvk::Device> &pDevice, myvk::Ptr<myvk::BufferBase> &pBuffer,
+inline void MakeBuffer(const myvk::Ptr<myvk::Device> &pDevice, myvk::Ptr<myvk::BufferBase> &pBuffer,
                        VkBufferUsageFlags bufferUsage, uint32_t elementCount) {
 	if (pBuffer == nullptr)
 		pBuffer = myvk::Buffer::Create(pDevice, elementCount * ElementSize_V, 0, bufferUsage);
