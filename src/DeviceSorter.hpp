@@ -39,7 +39,6 @@ public:
 		myvk::Ptr<myvk::BufferBase> pPassHistBuffer;
 		myvk::Ptr<myvk::BufferBase> pIndexBuffer;
 		myvk::Ptr<myvk::BufferBase> pDispatchArgBuffer;
-		mutable bool isDispatchArgBufferInitialized = false;
 
 		void update(const myvk::Ptr<myvk::Device> &pDevice, uint32_t count, double growFactor = 1.5);
 	};

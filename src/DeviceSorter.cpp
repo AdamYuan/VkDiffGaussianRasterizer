@@ -142,12 +142,6 @@ void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuff
 	myvk::Ptr<myvk::BufferBase> pDstKeyBuffer = resource.pTempKeyBuffer,
 	                            pDstPayloadBuffer = resource.pTempPayloadBuffer;
 
-	if (!resource.isDispatchArgBufferInitialized) {
-		resource.isDispatchArgBufferInitialized = true;
-		CmdInitializeBuffer(pCommandBuffer, resource.pDispatchArgBuffer,
-		                    std::array{VkDispatchIndirectCommand{0, 1, 1}, VkDispatchIndirectCommand{0, 1, 1}});
-	}
-
 	// Since all pipelines share the same layout, we only need to bind the majority of buffers once
 	pCommandBuffer->CmdPushDescriptorSet(
 	    mpPipelineLayout, VK_PIPELINE_BIND_POINT_COMPUTE, 0,

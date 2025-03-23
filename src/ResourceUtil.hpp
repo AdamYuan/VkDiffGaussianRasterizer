@@ -27,18 +27,6 @@ inline void MakeBuffer(const myvk::Ptr<myvk::Device> &pDevice, myvk::Ptr<myvk::B
 		pBuffer = myvk::Buffer::Create(pDevice, elementCount * ElementSize_V, 0, bufferUsage);
 }
 
-template <typename T>
-inline void CmdInitializeBuffer(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer,
-                                const myvk::Ptr<myvk::BufferBase> &pBuffer, const T &data) {
-	vkCmdUpdateBuffer(pCommandBuffer->GetHandle(), pBuffer->GetHandle(), 0, sizeof(T), &data);
-	pCommandBuffer->CmdPipelineBarrier2(
-	    {},
-	    {pBuffer->GetMemoryBarrier2(
-	        {VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_TRANSFER_WRITE_BIT},
-	        {VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT})},
-	    {});
-}
-
 } // namespace VkGSRaster
 
 #endif
