@@ -5,7 +5,7 @@
 #define BITS_PER_PASS 8
 #define RADIX (1 << BITS_PER_PASS)
 
-#define KEY_COUNT_BUFFER_OFFSET (2 * 4)
+#define KEY_COUNT_BUFFER_OFFSET (1 * 4)
 
 // Reset
 #define RESET_DIM 256

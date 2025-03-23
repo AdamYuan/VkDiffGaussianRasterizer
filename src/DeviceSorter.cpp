@@ -20,9 +20,9 @@ void DeviceSorter::Resource::update(const myvk::Ptr<myvk::Device> &pDevice, uint
 	                             PASS_COUNT * RADIX * ((count + SORT_PART_SIZE - 1) / SORT_PART_SIZE), growFactor);
 	MakeBuffer<sizeof(uint32_t)>(pDevice, pGlobalHistBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, PASS_COUNT * RADIX);
 	MakeBuffer<sizeof(uint32_t)>(pDevice, pIndexBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, PASS_COUNT);
-	MakeBuffer<sizeof(uint32_t)>(
+	MakeBuffer<sizeof(VkDispatchIndirectCommand)>(
 	    pDevice, pDispatchArgBuffer,
-	    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, 6);
+	    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, 2);
 }
 
 namespace {
@@ -144,7 +144,8 @@ void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuff
 
 	if (!resource.isDispatchArgBufferInitialized) {
 		resource.isDispatchArgBufferInitialized = true;
-		CmdInitializeBuffer(pCommandBuffer, resource.pDispatchArgBuffer, std::array<uint32_t, 6>{0, 1, 1, 0, 1, 1});
+		CmdInitializeBuffer(pCommandBuffer, resource.pDispatchArgBuffer,
+		                    std::array{VkDispatchIndirectCommand{0, 1, 1}, VkDispatchIndirectCommand{0, 1, 1}});
 	}
 
 	// Since all pipelines share the same layout, we only need to bind the majority of buffers once
@@ -209,7 +210,7 @@ void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuff
 	    },
 	    {});
 	pCommandBuffer->CmdBindPipeline(mpGlobalHistPipeline);
-	pCommandBuffer->CmdDispatchIndirect(resource.pDispatchArgBuffer, 0 * sizeof(uint32_t));
+	pCommandBuffer->CmdDispatchIndirect(resource.pDispatchArgBuffer, 0);
 
 	// ScanHist Pass
 	pCommandBuffer->CmdPipelineBarrier2(
@@ -287,7 +288,7 @@ void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuff
 		};
 		pCommandBuffer->CmdPushConstants(mpPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(OneSweepPushConstant),
 		                                 &pcData);
-		pCommandBuffer->CmdDispatchIndirect(resource.pDispatchArgBuffer, 3 * sizeof(uint32_t));
+		pCommandBuffer->CmdDispatchIndirect(resource.pDispatchArgBuffer, sizeof(VkDispatchIndirectCommand));
 
 		std::swap(pSrcKeyBuffer, pDstKeyBuffer);
 		std::swap(pSrcPayloadBuffer, pDstPayloadBuffer);
