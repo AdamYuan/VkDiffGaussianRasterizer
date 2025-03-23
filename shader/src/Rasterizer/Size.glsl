@@ -1,0 +1,9 @@
+#ifndef RASTERIZER_SIZE_GLSL
+#define RASTERIZER_SIZE_GLSL
+
+#define SH_DEGREE 3
+
+#define FORWARD_VIEW_DIM 64
+#define BACKWARD_VIEW_DIM 64
+
+#endif

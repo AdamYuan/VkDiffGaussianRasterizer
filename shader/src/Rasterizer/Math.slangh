@@ -1,0 +1,216 @@
+#pragma once
+
+#include "Size.glsl"
+
+struct SH : IDifferentiable {
+	float3 data[(SH_DEGREE + 1) * (SH_DEGREE + 1)];
+};
+
+struct SplatGeom : IDifferentiable {
+	float4 quat;
+	float3 scale, mean;
+	float opacity;
+};
+
+struct Splat : IDifferentiable {
+	SplatGeom geom;
+	SH sh;
+};
+
+struct SplatViewGeom : IDifferentiable {
+	float3 conic;
+	float2 mean2D;
+	float opacity;
+};
+
+struct SplatView : IDifferentiable {
+	SplatViewGeom geom;
+	float3 color;
+};
+
+struct SplatQuad {
+	float2 axis1, axis2;
+};
+
+struct Camera {
+	float3 pos;
+	float focalX, focalY;
+	float4x4 viewMat, projMat;
+	uint width, height;
+};
+
+[Differentiable]
+float3 sh2color(SH sh, float3 dir) {
+	// Spherical harmonics coefficients
+	const float SH_C0 = 0.28209479177387814;
+	const float SH_C1 = 0.4886025119029199;
+	const float SH_C2[] = { 1.0925484305920792, -1.0925484305920792, 0.31539156525252005, -1.0925484305920792,
+		                    0.5462742152960396 };
+	const float SH_C3[] = { -0.5900435899266435, 2.890611442640554, -0.4570457994644658, 0.3731763325901154,
+		                    -0.4570457994644658, 1.445305721320277, -0.5900435899266435 };
+
+	float3 color = SH_C0 * sh.data[0] + 0.5;
+
+	float x = dir.x;
+	float y = dir.y;
+	float z = dir.z;
+
+	float xx = x * x, yy = y * y, zz = z * z;
+	float xy = x * y, yz = y * z, xz = x * z;
+
+#if SH_DEGREE > 0
+	color += -SH_C1 * y * sh.data[1]  //
+	         + SH_C1 * z * sh.data[2] //
+	         - SH_C1 * x * sh.data[3];
+#endif
+
+#if SH_DEGREE > 1
+	color += SH_C2[0] * xy * sh.data[4]                      //
+	         + SH_C2[1] * yz * sh.data[5]                    //
+	         + SH_C2[2] * (2.0f * zz - xx - yy) * sh.data[6] //
+	         + SH_C2[3] * xz * sh.data[7]                    //
+	         + SH_C2[4] * (xx - yy) * sh.data[8];
+#endif
+
+#if SH_DEGREE > 2
+	color += SH_C3[0] * y * (3.0f * xx - yy) * sh.data[9]                       //
+	         + SH_C3[1] * xy * z * sh.data[10]                                  //
+	         + SH_C3[2] * y * (4.0f * zz - xx - yy) * sh.data[11]               //
+	         + SH_C3[3] * z * (2.0f * zz - 3.0f * xx - 3.0f * yy) * sh.data[12] //
+	         + SH_C3[4] * x * (4.0f * zz - xx - yy) * sh.data[13]               //
+	         + SH_C3[5] * z * (xx - yy) * sh.data[14]                           //
+	         + SH_C3[6] * x * (xx - 3.0f * yy) * sh.data[15];
+#endif
+
+	// RGB colors are clamped to positive values. If values are
+	// clamped, we need to keep track of this for the backward pass.
+	/* clamped[3 * idx + 0] = (result.x < 0);
+	clamped[3 * idx + 1] = (result.y < 0);
+	clamped[3 * idx + 2] = (result.z < 0); */
+	return max(color, 0.0);
+}
+
+[Differentiable]
+float3x3 quat2matrix(float4 quat) {
+	float x = quat.x;
+	float y = quat.y;
+	float z = quat.z;
+	float w = quat.w;
+	return float3x3(float3(1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)),
+	                float3(2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)),
+	                float3(2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)));
+}
+
+[Differentiable]
+float3x3 scale2matrix(float3 scale) { return float3x3(scale.x, 0, 0, 0, scale.y, 0, 0, 0, scale.z); }
+
+[Differentiable]
+float3 cov2conic(float3 cov) {
+	float det = cov.x * cov.z - cov.y * cov.y;
+	return float3(cov.z, -cov.y, cov.x) / det;
+}
+
+SplatQuad cov2quad(float3 cov) {
+	// [a, b]
+	// [b, c]
+	float a = cov.x, b = cov.y, c = cov.z;
+	// | a - \lambda, b           | = 0
+	// | b          , c - \lambda |
+	// \Rightarrow \lambda^2 - (a + c)\lambda + ac - b^2 = 0
+
+	// \frac{a + c}{2}
+	float mid = 0.5 * (a + c);
+	// \frac{\sqrt{(a + c)^2 - 4 (ac - b^2)}}{2} = \frac{\sqrt{(a - c)^2 + (2b)^2}}{2}
+	float radius = length(float2((a - c) * 0.5, b));
+
+	float lambda1 = mid + radius;
+	float lambda2 = mid - radius;
+
+	// [ a - \lambda, b           ][ e_x ] = 0
+	// [ b          , c - \lambda ][ e_y ]
+	float2 eigen1 = normalize(float2(b, lambda1 - a));
+	float2 eigen2 = float2(eigen1.y, -eigen1.x); // normalize(float2(b, lambda2 - a));
+
+	SplatQuad quad;
+	quad.axis1 = eigen1 * sqrt(lambda1);
+	quad.axis2 = eigen2 * sqrt(lambda2);
+	return quad;
+}
+
+[noinline]
+[Differentiable]
+SplatView splat2splatView(Splat splat, no_diff float3 camPos, no_diff float3x3 camViewMat, no_diff float2 camFocal,
+                          no_diff float2 camResolution, no_diff out SplatQuad o_splatQuad) {
+	float3 camMean = splat.geom.mean - camPos;
+	float3 viewMean = mul(camViewMat, camMean);
+
+	float invViewMeanZ = 1.0 / viewMean.z;
+
+	float2 projMean = viewMean.xy * camFocal * invViewMeanZ;
+	float2 camHalfRes = camResolution * 0.5;
+	float2 clampedProjMean = clamp(projMean, -1.3 * camHalfRes, 1.3 * camHalfRes);
+
+	float3x3 S = scale2matrix(splat.geom.scale);
+	float3x3 R = quat2matrix(splat.geom.quat);
+	float3x3 W = camViewMat;
+	float3x3 J = float3x3(float3(camFocal.x * invViewMeanZ, 0, -clampedProjMean.x * invViewMeanZ), //
+	                      float3(0, camFocal.y * invViewMeanZ, -clampedProjMean.y * invViewMeanZ), //
+	                      float3(0, 0, 0));
+
+	float3x3 JWRS = mul(mul(J, W), mul(R, S));
+	float2x2 Sigma = float2x2(mul(JWRS, transpose(JWRS)));
+	float3 cov2D = float3(Sigma[0][0], Sigma[0][1], Sigma[1][1]);
+
+	// Apply low-pass filter: every Gaussian should be at least
+	// one pixel wide/high. Discard 3rd row and column.
+	cov2D += float3(0.3, 0, 0.3);
+
+	SplatView splatView;
+	splatView.geom.mean2D = projMean + camHalfRes;
+	splatView.geom.conic = cov2conic(cov2D);
+	splatView.geom.opacity = splat.geom.opacity;
+	splatView.color = sh2color(splat.sh, normalize(camMean));
+	o_splatQuad = cov2quad(cov2D);
+	return splatView;
+}
+
+[noinline]
+Splat bwd_splat2splatView(Splat splat, float3 camPos, float3x3 camViewMat, float2 camFocal, float2 camResolution,
+                          SplatView dL_dsplatView) {
+	var dp = diffPair(splat);
+	SplatQuad splatQuad;
+	bwd_diff(splat2splatView)(dp, camPos, camViewMat, camFocal, camResolution, dL_dsplatView);
+	return dp.d;
+}
+
+[noinline]
+[Differentiable]
+float splatViewGeom2alpha(SplatViewGeom splatViewGeom, no_diff float2 fragCoord, no_diff float camHeight) {
+	float2 pos2D = float2(fragCoord.x, camHeight - fragCoord.y);
+	float2 x2D = pos2D - splatViewGeom.mean2D;
+
+	float power = -0.5 * (splatViewGeom.conic.x * x2D.x * x2D.x + splatViewGeom.conic.z * x2D.y * x2D.y) //
+	              - splatViewGeom.conic.y * x2D.x * x2D.y;
+	// power = min(power, 0.0);
+	return splatViewGeom.opacity * exp(power);
+}
+
+[noinline]
+SplatViewGeom bwd_splatViewGeom2alpha(SplatViewGeom splatViewGeom, float2 fragCoord, float camHeight, float dL_dalpha) {
+	var dp = diffPair(splatViewGeom);
+	bwd_diff(splatViewGeom2alpha)(dp, fragCoord, camHeight, dL_dalpha);
+	return dp.d;
+}
+
+[noinline]
+bool behindFrustum(Splat splat, float3 camPos, float3x3 camViewMat) {
+	float3 camMean = splat.geom.mean - camPos;
+	float3 viewMean = mul(camViewMat, camMean);
+	return viewMean.z < 0.2;
+}
+
+[noinline]
+bool inFrustum(float2 splatMean2D, SplatQuad splatQuad, float2 camResolution) {
+	// TODO: Implement this
+	return true;
+}
