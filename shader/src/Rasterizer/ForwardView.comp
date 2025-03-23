@@ -1,0 +1,45 @@
+#version 460
+
+#define RASTERIZER_LOAD_SPLAT
+#define RASTERIZER_STORE_SPLAT_VIEW
+#define RASTERIZER_STORE_SPLAT_QUAD
+#include "Common.glsl"
+
+layout(local_size_x = FORWARD_VIEW_DIM, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = B_SORT_KEYS_BINDING) writeonly buffer bSortKeys { uint gSortKeys[]; };
+layout(std430, binding = B_SORT_PAYLOADS_BINDING) writeonly buffer bSortPayloads { uint gSortPayloads[]; };
+layout(std430, binding = B_DRAW_ARGS_BINDING) buffer bDrawArgs { uint gDrawArgs[]; };
+
+// Radix Tricks by Michael Herf
+// http://stereopsis.com/radix.html
+uint float2CmpUint(float f) {
+	uint mask = (-int(floatBitsToUint(f) >> 31)) | 0x80000000;
+	return floatBitsToUint(f) ^ mask;
+}
+
+void main() {
+	uint splatIdx = gl_GlobalInvocationID.x;
+	Splat splat = loadSplat(splatIdx);
+	Camera camera = loadCamera();
+
+	if (splat.geom.opacity <= 0.0)
+		return;
+
+	float viewMeanZ;
+	if (behindFrustum(splat, camera, viewMeanZ))
+		return;
+
+	SplatQuad splatQuad;
+	SplatView splatView = splat2splatView(splat, camera, splatQuad);
+
+	if (!inFrustum(splatView.geom, splatQuad, camera))
+		return;
+
+	uint sortIdx = atomicAdd(gDrawArgs[1], 1u); // gDrawArgs[1] is InstanceCount
+	storeSplatView(splatIdx, splatView);
+	storeSplatQuad(splatIdx, splatQuad);
+
+	gSortKeys[sortIdx] = float2CmpUint(viewMeanZ);
+	gSortPayloads[sortIdx] = splatIdx;
+}
