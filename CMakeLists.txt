@@ -49,6 +49,7 @@ target_link_libraries(VkGSRaster_DeviceSorter PUBLIC
 add_library(VkGSRaster_Rasterizer STATIC
         src/Rasterizer.hpp
         src/Rasterizer.cpp
+        src/RasterizerShader.cpp
 )
 add_library(VkGSRaster::Rasterizer ALIAS VkGSRaster_Rasterizer)
 target_link_libraries(VkGSRaster_Rasterizer PUBLIC
