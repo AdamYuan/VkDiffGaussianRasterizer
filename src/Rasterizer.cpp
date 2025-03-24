@@ -4,11 +4,143 @@
 
 #include "Rasterizer.hpp"
 
-#include <shader/DeviceSorter/Size.hpp>
+#include <array>
 #include <shader/Rasterizer/Size.hpp>
+
+#include "ResourceUtil.hpp"
 
 namespace VkGSRaster {
 
-static_assert(KEY_COUNT_BUFFER_OFFSET == offsetof(VkDrawIndirectCommand, instanceCount));
+void Rasterizer::Resource::update(const myvk::Ptr<myvk::Device> &pDevice, uint32_t width, uint32_t height,
+                                  uint32_t splatCount, double growFactor) {
+	sorterResource.update(pDevice, splatCount, growFactor);
+
+	GrowBuffer<sizeof(uint32_t)>(pDevice, pSortKeyBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount, growFactor);
+	GrowBuffer<sizeof(uint32_t)>(pDevice, pSortPayloadBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount,
+	                             growFactor);
+	GrowBuffer<sizeof(float) * 4>(pDevice, pColorMean2DXBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount,
+	                              growFactor);
+	GrowBuffer<sizeof(float) * 4>(pDevice, pConicMean2DYBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount,
+	                              growFactor);
+	GrowBuffer<sizeof(float) * 4>(pDevice, pQuadBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount, growFactor);
+
+	MakeBuffer<sizeof(VkDrawIndirectCommand)>(
+	    pDevice, pDrawArgBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, 1);
+}
+
+namespace {
+struct PushConstantData {
+	std::array<float, 3> bgColor;
+	uint32_t splatCount;
+	std::array<float, 2> camFocal;
+	std::array<uint32_t, 2> camResolution;
+	std::array<float, 3> camPos;
+	std::array<float, 9> camViewMat; // Column-Major
+};
+} // namespace
+
+Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice) : mSorter{pDevice} {
+	auto pDescriptorSetLayout = myvk::DescriptorSetLayout::Create( //
+	    pDevice,
+	    std::vector<VkDescriptorSetLayoutBinding>{
+	        {.binding = B_MEANS_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+	        {.binding = B_SCALES_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+	        {.binding = B_ROTATES_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+	        {.binding = B_OPACITIES_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT},
+	        {.binding = B_SHS_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+
+	        {.binding = B_SORT_KEYS_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+	        {.binding = B_SORT_PAYLOADS_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT},
+
+	        {.binding = B_COLORS_MEAN2DXS_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT},
+	        {.binding = B_CONICS_MEAN2DYS_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT},
+	        {.binding = B_QUADS_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT},
+
+	        {.binding = B_DRAW_ARGS_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+	    },
+	    VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR);
+
+	mpPipelineLayout = myvk::PipelineLayout::Create(
+	    pDevice, {pDescriptorSetLayout},
+	    {VkPushConstantRange{
+	        .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+	        .offset = 0u,
+	        .size = sizeof(PushConstantData),
+	    }});
+
+	// Forward RenderPass
+	mpForwardRenderPass = myvk::RenderPass::Create(pDevice, [&] {
+		myvk::RenderPassState state{1, 1};
+		state.RegisterAttachment(0, "color", VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED,
+		                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_SAMPLE_COUNT_1_BIT,
+		                         VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE);
+		state.RegisterSubpass(0, "forwardDraw").AddDefaultColorAttachment("color", nullptr);
+		return state;
+	}());
+
+	// Common Shader Module
+	auto pDrawVertShader = createDrawVertShader(pDevice);
+
+	// Forward Pipelines
+	mpForwardResetPipeline = myvk::ComputePipeline::Create(mpPipelineLayout, createForwardResetShader(pDevice));
+	mpForwardViewPipeline = myvk::ComputePipeline::Create(mpPipelineLayout, createForwardViewShader(pDevice));
+	mpForwardDrawPipeline = myvk::GraphicsPipeline::Create(
+	    mpPipelineLayout, mpForwardRenderPass,
+	    myvk::GraphicsPipelineShaderModules{.vert = pDrawVertShader,
+	                                        .geom = createForwardDrawGeomShader(pDevice),
+	                                        .frag = createForwardDrawFragShader(pDevice)},
+	    [] {
+		    myvk::GraphicsPipelineState state{};
+		    state.m_dynamic_state.Enable({VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
+		    state.m_color_blend_state.Enable({VkPipelineColorBlendAttachmentState{
+		        .blendEnable = VK_TRUE,
+		    }});
+		    state.m_viewport_state.Enable();
+		    state.m_vertex_input_state.Enable();
+		    state.m_input_assembly_state.Enable(VK_PRIMITIVE_TOPOLOGY_POINT_LIST);
+		    state.m_rasterization_state.Initialize(VK_POLYGON_MODE_FILL, VK_FRONT_FACE_COUNTER_CLOCKWISE,
+		                                           VK_CULL_MODE_NONE);
+		    state.m_multisample_state.Enable(VK_SAMPLE_COUNT_1_BIT);
+		    return state;
+	    }(),
+	    0);
+}
 
 } // namespace VkGSRaster
+
+// Check DeviceSorter KeyCountBufferOffset
+#include <shader/DeviceSorter/Size.hpp>
+static_assert(KEY_COUNT_BUFFER_OFFSET == offsetof(VkDrawIndirectCommand, instanceCount));
