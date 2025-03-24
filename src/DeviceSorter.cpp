@@ -26,7 +26,7 @@ void DeviceSorter::Resource::update(const myvk::Ptr<myvk::Device> &pDevice, uint
 }
 
 namespace {
-struct OneSweepPushConstant {
+struct PushConstantData {
 	uint32_t passIdx, radixShift, writeKey;
 };
 } // namespace
@@ -77,7 +77,7 @@ DeviceSorter::DeviceSorter(const myvk::Ptr<myvk::Device> &pDevice) {
 	// Pipeline layouts
 	mpPipelineLayout = myvk::PipelineLayout::Create(
 	    pDevice, {pDescriptorSetLayout},
-	    {{.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = (uint32_t)sizeof(OneSweepPushConstant)}});
+	    {{.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = (uint32_t)sizeof(PushConstantData)}});
 
 	// Pipelines
 	mpResetPipeline = myvk::ComputePipeline::Create(mpPipelineLayout, createResetShader(pDevice));
@@ -275,12 +275,12 @@ void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuff
 			    });
 		}
 
-		OneSweepPushConstant pcData = {
+		PushConstantData pcData = {
 		    .passIdx = passIdx,
 		    .radixShift = passIdx * BITS_PER_PASS,
 		    .writeKey = uint32_t(keyAsPayload || passIdx < PASS_COUNT - 1),
 		};
-		pCommandBuffer->CmdPushConstants(mpPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(OneSweepPushConstant),
+		pCommandBuffer->CmdPushConstants(mpPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstantData),
 		                                 &pcData);
 		pCommandBuffer->CmdDispatchIndirect(resource.pDispatchArgBuffer, sizeof(VkDispatchIndirectCommand));
 
