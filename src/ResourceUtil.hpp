@@ -7,6 +7,7 @@
 #define VKGSRASTER_RESOURCEUTIL_HPP
 
 #include <myvk/Buffer.hpp>
+#include <myvk/Image.hpp>
 
 namespace VkGSRaster {
 
@@ -25,6 +26,13 @@ inline void MakeBuffer(const myvk::Ptr<myvk::Device> &pDevice, myvk::Ptr<myvk::B
                        VkBufferUsageFlags bufferUsage, uint32_t elementCount) {
 	if (pBuffer == nullptr)
 		pBuffer = myvk::Buffer::Create(pDevice, elementCount * ElementSize_V, 0, bufferUsage);
+}
+
+template <VkFormat Format_V>
+inline void ResizeImage(const myvk::Ptr<myvk::Device> &pDevice, myvk::Ptr<myvk::ImageBase> &pImage,
+                        VkImageUsageFlags imageUsage, uint32_t width, uint32_t height) {
+	if (pImage == nullptr || pImage->GetExtent().width != width || pImage->GetExtent().height != height)
+		pImage = myvk::Image::CreateTexture2D(pDevice, {width, height}, 1, Format_V, imageUsage);
 }
 
 } // namespace VkGSRaster

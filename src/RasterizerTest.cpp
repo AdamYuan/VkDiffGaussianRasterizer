@@ -32,11 +32,18 @@ int main() {
 	auto pFrameManager = myvk::FrameManager::Create(pGenericQueue, pPresentQueue, false, kFrameCount);
 
 	auto pRenderPass = myvk::RenderPass::Create(pDevice, [&] {
-		myvk::RenderPassState state{1, 1};
-		state.RegisterAttachment(0, "color_attachment", pFrameManager->GetSwapchain()->GetImageFormat(),
-		                         VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_SAMPLE_COUNT_1_BIT,
-		                         VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE);
-		state.RegisterSubpass(0, "gui_pass").AddDefaultColorAttachment("color_attachment", nullptr);
+		myvk::RenderPassState2 state;
+		state.SetAttachmentCount(1)
+		    .SetAttachment(0, pFrameManager->GetSwapchain()->GetImageFormat(), {.op = VK_ATTACHMENT_LOAD_OP_CLEAR},
+		                   {.op = VK_ATTACHMENT_STORE_OP_STORE, .layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR})
+		    .SetSubpassCount(1)
+		    .SetSubpass(
+		        0, {.color_attachment_refs = {{.attachment = 0, .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}}})
+		    .SetDependencyCount(1)
+		    .SetSrcExternalDependency(
+		        0, {VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, 0},
+		        {.subpass = 0,
+		         .sync = myvk::GetAttachmentLoadOpSync(VK_IMAGE_ASPECT_COLOR_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR)});
 		return state;
 	}());
 

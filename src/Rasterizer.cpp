@@ -15,17 +15,25 @@ void Rasterizer::Resource::update(const myvk::Ptr<myvk::Device> &pDevice, uint32
                                   uint32_t splatCount, double growFactor) {
 	sorterResource.update(pDevice, splatCount, growFactor);
 
-	GrowBuffer<sizeof(uint32_t)>(pDevice, pSortKeyBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount, growFactor);
-	GrowBuffer<sizeof(uint32_t)>(pDevice, pSortPayloadBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount,
-	                             growFactor);
+	GrowBuffer<sizeof(uint32_t)>(pDevice, pSortKeyBuffer,
+	                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | DeviceSorter::GetArgsUsage().keyBuffer,
+	                             splatCount, growFactor);
+	GrowBuffer<sizeof(uint32_t)>(pDevice, pSortPayloadBuffer,
+	                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | DeviceSorter::GetArgsUsage().payloadBuffer,
+	                             splatCount, growFactor);
 	GrowBuffer<sizeof(float) * 4>(pDevice, pColorMean2DXBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount,
 	                              growFactor);
 	GrowBuffer<sizeof(float) * 4>(pDevice, pConicMean2DYBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount,
 	                              growFactor);
 	GrowBuffer<sizeof(float) * 4>(pDevice, pQuadBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount, growFactor);
 
-	MakeBuffer<sizeof(VkDrawIndirectCommand)>(
-	    pDevice, pDrawArgBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, 1);
+	MakeBuffer<sizeof(VkDrawIndirectCommand)>(pDevice, pDrawArgBuffer,
+	                                          VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+	                                              VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
+	                                              DeviceSorter::GetArgsUsage().countBuffer,
+	                                          1);
+	ResizeImage<VK_FORMAT_R32G32B32A32_SFLOAT>(pDevice, pColorImage, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, //
+	                                           width, height);
 }
 
 namespace {
@@ -90,6 +98,10 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice) : mSorter{pDevice
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 	         .descriptorCount = 1u,
 	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+	        {.binding = B_SORT_COUNT_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
 	    },
 	    VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR);
 
@@ -103,11 +115,18 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice) : mSorter{pDevice
 
 	// Forward RenderPass
 	mpForwardRenderPass = myvk::RenderPass::Create(pDevice, [&] {
-		myvk::RenderPassState state{1, 1};
-		state.RegisterAttachment(0, "color", VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED,
-		                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_SAMPLE_COUNT_1_BIT,
-		                         VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE);
-		state.RegisterSubpass(0, "forwardDraw").AddDefaultColorAttachment("color", nullptr);
+		myvk::RenderPassState2 state;
+		state.SetAttachmentCount(1)
+		    .SetAttachment(0, VK_FORMAT_R32G32B32A32_SFLOAT, {.op = VK_ATTACHMENT_LOAD_OP_CLEAR},
+		                   {.op = VK_ATTACHMENT_STORE_OP_STORE, .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+		    .SetSubpassCount(1)
+		    .SetSubpass(
+		        0, {.color_attachment_refs = {{.attachment = 0, .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}}})
+		    .SetDependencyCount(1)
+		    .SetSrcExternalDependency(
+		        0, {VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, 0},
+		        {.subpass = 0,
+		         .sync = myvk::GetAttachmentLoadOpSync(VK_IMAGE_ASPECT_COLOR_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR)});
 		return state;
 	}());
 
@@ -144,3 +163,4 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice) : mSorter{pDevice
 // Check DeviceSorter KeyCountBufferOffset
 #include <shader/DeviceSorter/Size.hpp>
 static_assert(KEY_COUNT_BUFFER_OFFSET == offsetof(VkDrawIndirectCommand, instanceCount));
+static_assert(KEY_COUNT_BUFFER_OFFSET == SORT_COUNT_BUFFER_OFFSET);

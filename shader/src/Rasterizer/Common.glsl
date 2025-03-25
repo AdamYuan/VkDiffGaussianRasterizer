@@ -26,6 +26,10 @@ Camera loadCamera() {
 	return cam;
 }
 
+layout(binding = B_SORT_COUNT_BINDING) uniform bSortCount {
+	layout(offset = SORT_COUNT_BUFFER_OFFSET) uint gSplatSortCount;
+};
+
 struct Vec3Std430 {
 	float vec[3];
 };
