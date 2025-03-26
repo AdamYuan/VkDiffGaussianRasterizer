@@ -80,7 +80,7 @@ int main() {
 
 			pCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-			pCommandBuffer->CmdBeginRenderPass(pRenderPass, {pFramebuffer},
+			pCommandBuffer->CmdBeginRenderPass(pRenderPass, pFramebuffer,
 			                                   {pFrameManager->GetCurrentSwapchainImageView()},
 			                                   {{{0.5f, 0.5f, 0.5f, 1.0f}}});
 			pImGuiRenderer->CmdDrawPipeline(pCommandBuffer, currentFrame);

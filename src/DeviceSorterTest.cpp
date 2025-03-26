@@ -242,7 +242,7 @@ int main() {
 			        myvk::ImageSyncState{.stage_mask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT},
 			        myvk::ImageSyncState{.layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR})});
 
-			pCommandBuffer->CmdBeginRenderPass(pRenderPass, {pFramebuffer},
+			pCommandBuffer->CmdBeginRenderPass(pRenderPass, pFramebuffer,
 			                                   {pFrameManager->GetCurrentSwapchainImageView()},
 			                                   {{{0.5f, 0.5f, 0.5f, 1.0f}}});
 			pImGuiRenderer->CmdDrawPipeline(pCommandBuffer, currentFrame);
