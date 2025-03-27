@@ -1,4 +1,5 @@
 #include "../src/Rasterizer.hpp"
+#include "GSModel.hpp"
 
 #include <myvk/FrameManager.hpp>
 #include <myvk/GLFWHelper.hpp>
@@ -7,6 +8,7 @@
 #include <myvk/Instance.hpp>
 #include <myvk/Queue.hpp>
 #include <myvk/QueueSelector.hpp>
+#include <tinyfiledialogs.h>
 
 constexpr uint32_t kFrameCount = 3, kWidth = 720, kHeight = 720;
 constexpr uint32_t kMaxSortKeyCount = 1000000;
@@ -63,6 +65,8 @@ int main() {
 	rasterizerResource.updateBuffer(pDevice, kMaxSortKeyCount);
 	rasterizerResource.updateImage(pDevice, kWidth, kHeight, rasterizer);
 
+	VkGSModel vkGsModel{};
+
 	while (!glfwWindowShouldClose(pWindow)) {
 		glfwPollEvents();
 
@@ -70,6 +74,17 @@ int main() {
 			myvk::ImGuiNewFrame();
 
 			ImGui::Begin("Info");
+			if (ImGui::Button("Load")) {
+
+				static constexpr int kFilterCount = 1;
+				static constexpr const char *kFilterPatterns[kFilterCount] = {"*.ply"};
+				const char *filename =
+				    tinyfd_openFileDialog("Open GS Model", "", kFilterCount, kFilterPatterns, nullptr, false);
+				if (filename)
+					vkGsModel =
+					    VkGSModel::Create(pGenericQueue, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, GSModel::Load(filename));
+			}
+			ImGui::Text("Splat Count: %u", vkGsModel.splatCount);
 			ImGui::End();
 
 			ImGui::Render();

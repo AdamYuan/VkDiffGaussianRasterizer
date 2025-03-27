@@ -58,6 +58,11 @@ target_link_libraries(VkGSRaster_Rasterizer PUBLIC
         shader::Rasterizer
 )
 
+# Tests
+
+add_subdirectory(test/dep/json)
+add_subdirectory(test/dep/tinyfiledialogs)
+
 add_executable(DeviceSorterTest
         test/DeviceSorterTest.cpp
 )
@@ -68,9 +73,11 @@ target_link_libraries(DeviceSorterTest PRIVATE
 )
 
 add_executable(RasterizerTest
+        test/GSModel.cpp
         test/RasterizerTest.cpp
 )
 target_link_libraries(RasterizerTest PRIVATE
         myvk::vulkan myvk::glfw myvk::imgui
         VkGSRaster::Rasterizer
+        tinyfiledialogs
 )
