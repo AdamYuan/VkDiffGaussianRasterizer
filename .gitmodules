@@ -2,3 +2,6 @@
 	path = dep/MyVK
 	url = git@github.com:AdamYuan/MyVK.git
 	branch = vkgsraster
+[submodule "dep/json"]
+	path = dep/json
+	url = git@github.com:nlohmann/json.git
