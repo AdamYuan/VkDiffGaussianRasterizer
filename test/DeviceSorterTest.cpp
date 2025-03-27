@@ -62,7 +62,7 @@ int main() {
 	});
 
 	using VkGSRaster::DeviceSorter;
-	DeviceSorter sorter{pDevice};
+	DeviceSorter sorter{pDevice, {.useKeyAsPayload = true}};
 	DeviceSorter::Resource sorterResource;
 
 	sorterResource.update(pDevice, kMaxSortKeyCount);
@@ -213,7 +213,7 @@ int main() {
 			                      .pKeyBuffer = pKeyBuffer,
 			                      .pPayloadBuffer = pPayloadBuffer,
 			                  },
-			                  sorterResource, true);
+			                  sorterResource);
 
 			pCommandBuffer->CmdPipelineBarrier2(
 			    {},

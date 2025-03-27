@@ -31,7 +31,7 @@ struct PushConstantData {
 };
 } // namespace
 
-DeviceSorter::DeviceSorter(const myvk::Ptr<myvk::Device> &pDevice) {
+DeviceSorter::DeviceSorter(const myvk::Ptr<myvk::Device> &pDevice, const Config &config) : mConfig{config} {
 	auto pDescriptorSetLayout = myvk::DescriptorSetLayout::Create( //
 	    pDevice,
 	    std::vector<VkDescriptorSetLayoutBinding>{
@@ -137,7 +137,7 @@ const DeviceSorter::ArgsUsage &DeviceSorter::GetArgsUsage() {
 }
 
 void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const ROArgs &roArgs,
-                              const RWArgs &rwArgs, const Resource &resource, bool keyAsPayload) const {
+                              const RWArgs &rwArgs, const Resource &resource) const {
 	myvk::Ptr<myvk::BufferBase> pSrcKeyBuffer = rwArgs.pKeyBuffer, pSrcPayloadBuffer = rwArgs.pPayloadBuffer;
 	myvk::Ptr<myvk::BufferBase> pDstKeyBuffer = resource.pTempKeyBuffer,
 	                            pDstPayloadBuffer = resource.pTempPayloadBuffer;
@@ -278,7 +278,7 @@ void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuff
 		PushConstantData pcData = {
 		    .passIdx = passIdx,
 		    .radixShift = passIdx * BITS_PER_PASS,
-		    .writeKey = uint32_t(keyAsPayload || passIdx < PASS_COUNT - 1),
+		    .writeKey = uint32_t(mConfig.useKeyAsPayload || passIdx < PASS_COUNT - 1),
 		};
 		pCommandBuffer->CmdPushConstants(mpPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstantData),
 		                                 &pcData);

@@ -53,7 +53,7 @@ struct PushConstantData {
 };
 } // namespace
 
-Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice) : mSorter{pDevice} {
+Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice) : mSorter{pDevice, {.useKeyAsPayload = false}} {
 	auto pDescriptorSetLayout = myvk::DescriptorSetLayout::Create( //
 	    pDevice,
 	    std::vector<VkDescriptorSetLayoutBinding>{
@@ -280,7 +280,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	// Sort
 	mSorter.CmdExecute(pCommandBuffer, {.pCountBuffer = resource.pDrawArgBuffer},
 	                   {.pKeyBuffer = resource.pSortKeyBuffer, .pPayloadBuffer = resource.pSortPayloadBuffer},
-	                   resource.sorterResource, false);
+	                   resource.sorterResource);
 
 	// Read-After-Write Barriers for pSortPayloadBuffer, SplatView Buffers, SplatQuad Buffers
 	pCommandBuffer->CmdPipelineBarrier2(

@@ -12,6 +12,11 @@ namespace VkGSRaster {
 
 class DeviceSorter {
 public:
+	struct Config {
+		// Whether to make the final keys ordered or not
+		bool useKeyAsPayload = false;
+	};
+
 	// Read-Only
 	struct ROArgs {
 		myvk::Ptr<myvk::BufferBase> pCountBuffer;
@@ -44,6 +49,8 @@ public:
 	};
 
 private:
+	Config mConfig{};
+
 	myvk::Ptr<myvk::PipelineLayout> mpPipelineLayout;
 	myvk::Ptr<myvk::ComputePipeline> mpResetPipeline, mpGlobalHistPipeline, mpScanHistPipeline, mpOneSweepPipeline;
 
@@ -54,10 +61,12 @@ private:
 
 public:
 	DeviceSorter() = default;
-	explicit DeviceSorter(const myvk::Ptr<myvk::Device> &pDevice);
+	explicit DeviceSorter(const myvk::Ptr<myvk::Device> &pDevice, const Config &config);
+
+	const Config &GetConfig() const { return mConfig; }
 
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const ROArgs &roArgs, const RWArgs &rwArgs,
-	                const Resource &resource, bool keyAsPayload = false) const;
+	                const Resource &resource) const;
 
 	// RWArgs must be visible to GetSrcRWArgsSync() before CmdExecute()
 	static const RWArgsSyncState &GetSrcRWArgsSync();
