@@ -58,19 +58,8 @@ target_link_libraries(VkGSRaster_Rasterizer PUBLIC
         shader::Rasterizer
 )
 
-add_executable(VkDiffGaussianRasterizer
-        src/main.cpp
-
-        src/Context.hpp
-        src/Context.cpp
-)
-target_link_libraries(VkDiffGaussianRasterizer PRIVATE
-        myvk::vulkan myvk::glfw myvk::imgui
-        VkGSRaster::DeviceSorter
-)
-
 add_executable(DeviceSorterTest
-        src/DeviceSorterTest.cpp
+        test/DeviceSorterTest.cpp
 )
 target_link_libraries(DeviceSorterTest PRIVATE
         myvk::vulkan myvk::glfw myvk::imgui
@@ -79,7 +68,7 @@ target_link_libraries(DeviceSorterTest PRIVATE
 )
 
 add_executable(RasterizerTest
-        src/RasterizerTest.cpp
+        test/RasterizerTest.cpp
 )
 target_link_libraries(RasterizerTest PRIVATE
         myvk::vulkan myvk::glfw myvk::imgui

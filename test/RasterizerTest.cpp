@@ -1,4 +1,4 @@
-#include "Rasterizer.hpp"
+#include "../src/Rasterizer.hpp"
 
 #include <myvk/FrameManager.hpp>
 #include <myvk/GLFWHelper.hpp>

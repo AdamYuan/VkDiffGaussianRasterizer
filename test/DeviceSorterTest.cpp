@@ -1,4 +1,4 @@
-#include "DeviceSorter.hpp"
+#include "../src/DeviceSorter.hpp"
 
 #include <random>
 
