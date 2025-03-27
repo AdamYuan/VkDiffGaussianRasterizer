@@ -11,8 +11,8 @@
 
 namespace VkGSRaster {
 
-void Rasterizer::Resource::update(const myvk::Ptr<myvk::Device> &pDevice, uint32_t width, uint32_t height,
-                                  uint32_t splatCount, double growFactor) {
+void Rasterizer::Resource::updateBuffer(const myvk::Ptr<myvk::Device> &pDevice, uint32_t splatCount,
+                                        double growFactor) {
 	sorterResource.update(pDevice, splatCount, growFactor);
 
 	GrowBuffer<sizeof(uint32_t)>(pDevice, pSortKeyBuffer,
@@ -32,8 +32,14 @@ void Rasterizer::Resource::update(const myvk::Ptr<myvk::Device> &pDevice, uint32
 	                                              VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
 	                                              DeviceSorter::GetArgsUsage().countBuffer,
 	                                          1);
-	ResizeImage<VK_FORMAT_R32G32B32A32_SFLOAT>(pDevice, pColorImage, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, //
-	                                           width, height);
+}
+void Rasterizer::Resource::updateImage(const myvk::Ptr<myvk::Device> &pDevice, uint32_t width, uint32_t height,
+                                       const Rasterizer &rasterizer) {
+	if (ResizeImage<VK_FORMAT_R32G32B32A32_SFLOAT>(pDevice, pColorImage, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, //
+	                                               width, height)) {
+		pColorForwardFramebuffer = myvk::Framebuffer::Create(
+		    rasterizer.mpForwardRenderPass, myvk::ImageView::Create(pColorImage, VK_IMAGE_VIEW_TYPE_2D));
+	}
 }
 
 namespace {
@@ -116,9 +122,11 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice) : mSorter{pDevice
 	// Forward RenderPass
 	mpForwardRenderPass = myvk::RenderPass::Create(pDevice, [&] {
 		myvk::RenderPassState2 state;
-		state.SetAttachmentCount(1)
+		state
+		    .SetAttachmentCount(1)
+		    // TODO: Modify store layout
 		    .SetAttachment(0, VK_FORMAT_R32G32B32A32_SFLOAT, {.op = VK_ATTACHMENT_LOAD_OP_CLEAR},
-		                   {.op = VK_ATTACHMENT_STORE_OP_STORE, .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+		                   {.op = VK_ATTACHMENT_STORE_OP_STORE, .layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL})
 		    .SetSubpassCount(1)
 		    .SetSubpass(
 		        0, {.color_attachment_refs = {{.attachment = 0, .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}}})
@@ -127,6 +135,7 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice) : mSorter{pDevice
 		        0, {VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, 0},
 		        {.subpass = 0,
 		         .sync = myvk::GetAttachmentLoadOpSync(VK_IMAGE_ASPECT_COLOR_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR)});
+		// TODO: Add Dst External Dependency
 		return state;
 	}());
 
@@ -146,6 +155,14 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice) : mSorter{pDevice
 		    state.m_dynamic_state.Enable({VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
 		    state.m_color_blend_state.Enable({VkPipelineColorBlendAttachmentState{
 		        .blendEnable = VK_TRUE,
+		        .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+		        .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+		        .colorBlendOp = VK_BLEND_OP_ADD,
+		        .srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+		        .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+		        .alphaBlendOp = VK_BLEND_OP_ADD,
+		        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
+		                          VK_COLOR_COMPONENT_A_BIT,
 		    }});
 		    state.m_viewport_state.Enable();
 		    state.m_vertex_input_state.Enable();
@@ -156,6 +173,160 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice) : mSorter{pDevice
 		    return state;
 	    }(),
 	    0);
+}
+
+void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const ForwardROArgs &roArgs,
+                            const ForwardRWArgs &rwArgs, const Resource &resource) const {
+	std::vector kDescriptorSetWrites = {
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.pMeanBuffer, B_MEANS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.pScaleBuffer, B_SCALES_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.pRotateBuffer, B_ROTATES_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.pOpacityBuffer, B_OPACITIES_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.pSHBuffer, B_SHS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pSortKeyBuffer, B_SORT_KEYS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pSortPayloadBuffer, B_SORT_PAYLOADS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pColorMean2DXBuffer, B_COLORS_MEAN2DXS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pConicMean2DYBuffer, B_CONICS_MEAN2DYS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pQuadBuffer, B_QUADS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pDrawArgBuffer, B_DRAW_ARGS_BINDING),
+	    myvk::DescriptorSetWrite::WriteUniformBuffer(nullptr, resource.pDrawArgBuffer, B_SORT_COUNT_BINDING),
+	};
+	pCommandBuffer->CmdPushDescriptorSet(mpPipelineLayout, VK_PIPELINE_BIND_POINT_COMPUTE, 0, kDescriptorSetWrites);
+	pCommandBuffer->CmdPushDescriptorSet(mpPipelineLayout, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, kDescriptorSetWrites);
+
+	// Push Constant
+	PushConstantData pcData = {
+	    .bgColor = roArgs.bgColor,
+	    .splatCount = roArgs.splatCount,
+	    .camFocal = {float(roArgs.camWidth) * 0.5f / roArgs.camTanFovX,
+	                 float(roArgs.camHeight) * 0.5f / roArgs.camTanFovY},
+	    .camResolution = {roArgs.camWidth, roArgs.camHeight},
+	    .camPos = roArgs.camPos,
+	    .camViewMat = roArgs.camViewMatrix,
+	};
+	pCommandBuffer->CmdPushConstants(
+	    mpPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, //
+	    0, sizeof(PushConstantData), &pcData);
+
+	// Reset
+	pCommandBuffer->CmdPipelineBarrier2(
+	    {},
+	    {
+	        resource.pDrawArgBuffer->GetMemoryBarrier2(
+	            // VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT reads as DrawArg (ForwardDraw | BackwardDraw)
+	            // VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT reads as UniformBuffer (BackwardReset | BackwardView)
+	            // DeviceSorter reads
+	            {VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
+	                 DeviceSorter::GetROArgsSync().countBuffer.stage_mask,
+	             0},
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_WRITE_BIT}),
+	    },
+	    {});
+	pCommandBuffer->CmdBindPipeline(mpForwardResetPipeline);
+	pCommandBuffer->CmdDispatch(1, 1, 1);
+
+	// View
+	pCommandBuffer->CmdPipelineBarrier2(
+	    {},
+	    {
+	        resource.pDrawArgBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_WRITE_BIT},
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_SHADER_READ_BIT}),
+	        resource.pSortKeyBuffer->GetMemoryBarrier2(
+	            DeviceSorter::GetDstRWArgsSync().keyBuffer.GetWrite(),
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_WRITE_BIT}),
+	        resource.pSortPayloadBuffer->GetMemoryBarrier2(
+	            // VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT reads as StorageBuffer (BackwardView)
+	            // VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT reads as StorageBuffer (ForwardDraw.geom | BackwardDraw.geom)
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, 0},
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_WRITE_BIT}),
+	        // SplatView and SplatQuad Buffers
+	        // VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT reads (ForwardDraw.geom | BackwardDraw.geom)
+	        resource.pColorMean2DXBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, 0},
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
+	        resource.pConicMean2DYBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, 0},
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
+	        resource.pQuadBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, 0},
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
+	    },
+	    {});
+	pCommandBuffer->CmdBindPipeline(mpForwardViewPipeline);
+	pCommandBuffer->CmdDispatch((roArgs.splatCount + FORWARD_VIEW_DIM - 1) / FORWARD_VIEW_DIM, 1, 1);
+
+	// Prepare for Sort (+ Read-After-Write Barrier for pDrawArgBuffer)
+	pCommandBuffer->CmdPipelineBarrier2( //
+	    {},
+	    {
+	        resource.pSortKeyBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_WRITE_BIT},
+	            DeviceSorter::GetSrcRWArgsSync().keyBuffer),
+	        resource.pSortPayloadBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_WRITE_BIT},
+	            DeviceSorter::GetSrcRWArgsSync().payloadBuffer),
+	        resource.pDrawArgBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_WRITE_BIT},
+	            DeviceSorter::GetROArgsSync().countBuffer |
+	                // VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT reads as DrawArg (ForwardDraw | BackwardDraw)
+	                // VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT reads as UniformBuffer (BackwardReset | BackwardView)
+	                myvk::BufferSyncState{
+	                    VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+	                    VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_UNIFORM_READ_BIT,
+	                }),
+	    },
+	    {});
+
+	// Sort
+	mSorter.CmdExecute(pCommandBuffer, {.pCountBuffer = resource.pDrawArgBuffer},
+	                   {.pKeyBuffer = resource.pSortKeyBuffer, .pPayloadBuffer = resource.pSortPayloadBuffer},
+	                   resource.sorterResource, false);
+
+	// Read-After-Write Barriers for pSortPayloadBuffer, SplatView Buffers, SplatQuad Buffers
+	pCommandBuffer->CmdPipelineBarrier2(
+	    {},
+	    {
+	        resource.pSortPayloadBuffer->GetMemoryBarrier2(
+	            DeviceSorter::GetDstRWArgsSync().payloadBuffer.GetWrite(),
+	            // VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT reads as StorageBuffer (BackwardView)
+	            // VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT reads as StorageBuffer (ForwardDraw.geom | BackwardDraw.geom)
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT,
+	             VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
+	        // SplatView and SplatQuad Buffers
+	        // VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT reads (ForwardDraw.geom | BackwardDraw.geom)
+	        resource.pColorMean2DXBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
+	        resource.pConicMean2DYBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
+	        resource.pQuadBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
+	    },
+	    {});
+
+	// Draw
+	pCommandBuffer->CmdBeginRenderPass(mpForwardRenderPass, resource.pColorForwardFramebuffer,
+	                                   {{{roArgs.bgColor[0], roArgs.bgColor[1], roArgs.bgColor[2], 1.0f}}});
+	pCommandBuffer->CmdBindPipeline(mpForwardDrawPipeline);
+	pCommandBuffer->CmdSetViewport({VkViewport{
+	    .x = 0,
+	    .y = 0,
+	    .width = (float)roArgs.camWidth,
+	    .height = (float)roArgs.camHeight,
+	    .minDepth = 0,
+	    .maxDepth = 0,
+	}});
+	pCommandBuffer->CmdSetScissor({VkRect2D{
+	    .offset = {},
+	    .extent = {.width = roArgs.camWidth, .height = roArgs.camHeight},
+	}});
+	pCommandBuffer->CmdDrawIndirect(resource.pDrawArgBuffer, 0, 1);
+	pCommandBuffer->CmdEndRenderPass();
+
+	// TODO: Copy to rwArgs.
 }
 
 } // namespace VkGSRaster

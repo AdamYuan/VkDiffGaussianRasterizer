@@ -60,7 +60,8 @@ int main() {
 	Rasterizer rasterizer{pDevice};
 	Rasterizer::Resource rasterizerResource;
 
-	rasterizerResource.update(pDevice, kWidth, kHeight, kMaxSortKeyCount);
+	rasterizerResource.updateBuffer(pDevice, kMaxSortKeyCount);
+	rasterizerResource.updateImage(pDevice, kWidth, kHeight, rasterizer);
 
 	while (!glfwWindowShouldClose(pWindow)) {
 		glfwPollEvents();

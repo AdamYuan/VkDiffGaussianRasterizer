@@ -18,7 +18,7 @@ class Rasterizer {
 public:
 	struct ForwardROArgs {
 		// Camera
-		int camWidth, camHeight;
+		uint32_t camWidth, camHeight;
 		float camTanFovX, camTanFovY;
 		std::array<float, 3 * 3> camViewMatrix;
 		std::array<float, 3> camPos;
@@ -27,7 +27,7 @@ public:
 		std::array<float, 3> bgColor;
 
 		// Splats
-		int splatCount;
+		uint32_t splatCount;
 		myvk::Ptr<myvk::BufferBase> pMeanBuffer;    // P * [float3]
 		myvk::Ptr<myvk::BufferBase> pScaleBuffer;   // P * [float3]
 		myvk::Ptr<myvk::BufferBase> pRotateBuffer;  // P * [float4]
@@ -48,10 +48,13 @@ public:
 		myvk::Ptr<myvk::BufferBase> pQuadBuffer;                        // P * [float4]
 		myvk::Ptr<myvk::BufferBase> pDrawArgBuffer;                     // uint4
 		myvk::Ptr<myvk::BufferBase> pDispatchArgBuffer;                 // uint3
-		myvk::Ptr<myvk::ImageBase> pColorImage;                         // W * H * [float4]
 
-		void update(const myvk::Ptr<myvk::Device> &pDevice, uint32_t width, uint32_t height, uint32_t splatCount,
-		            double growFactor = 1.5);
+		myvk::Ptr<myvk::ImageBase> pColorImage; // W * H * [float4]
+		myvk::Ptr<myvk::Framebuffer> pColorForwardFramebuffer;
+
+		void updateBuffer(const myvk::Ptr<myvk::Device> &pDevice, uint32_t splatCount, double growFactor = 1.5);
+		void updateImage(const myvk::Ptr<myvk::Device> &pDevice, uint32_t width, uint32_t height,
+		                 const Rasterizer &rasterizer);
 	};
 
 private:
@@ -71,6 +74,9 @@ private:
 public:
 	Rasterizer() = default;
 	explicit Rasterizer(const myvk::Ptr<myvk::Device> &pDevice);
+
+	void CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const ForwardROArgs &roArgs,
+	                const ForwardRWArgs &rwArgs, const Resource &resource) const;
 };
 
 } // namespace VkGSRaster
