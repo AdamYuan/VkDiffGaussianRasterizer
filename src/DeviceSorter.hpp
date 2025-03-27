@@ -65,8 +65,8 @@ public:
 
 	const Config &GetConfig() const { return mConfig; }
 
-	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const ROArgs &roArgs, const RWArgs &rwArgs,
-	                const Resource &resource) const;
+	void CmdSort(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const ROArgs &roArgs, const RWArgs &rwArgs,
+	             const Resource &resource) const;
 
 	// RWArgs must be visible to GetSrcRWArgsSync() before CmdExecute()
 	static const RWArgsSyncState &GetSrcRWArgsSync();

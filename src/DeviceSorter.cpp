@@ -136,7 +136,7 @@ const DeviceSorter::ArgsUsage &DeviceSorter::GetArgsUsage() {
 	return kUsage;
 }
 
-void DeviceSorter::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const ROArgs &roArgs,
+void DeviceSorter::CmdSort(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const ROArgs &roArgs,
                               const RWArgs &rwArgs, const Resource &resource) const {
 	myvk::Ptr<myvk::BufferBase> pSrcKeyBuffer = rwArgs.pKeyBuffer, pSrcPayloadBuffer = rwArgs.pPayloadBuffer;
 	myvk::Ptr<myvk::BufferBase> pDstKeyBuffer = resource.pTempKeyBuffer,

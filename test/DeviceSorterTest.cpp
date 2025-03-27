@@ -205,15 +205,15 @@ int main() {
 			    },
 			    {});
 
-			sorter.CmdExecute(pCommandBuffer,
-			                  {
-			                      .pCountBuffer = pCountBuffer,
-			                  },
-			                  {
-			                      .pKeyBuffer = pKeyBuffer,
-			                      .pPayloadBuffer = pPayloadBuffer,
-			                  },
-			                  sorterResource);
+			sorter.CmdSort(pCommandBuffer,
+			               {
+			                   .pCountBuffer = pCountBuffer,
+			               },
+			               {
+			                   .pKeyBuffer = pKeyBuffer,
+			                   .pPayloadBuffer = pPayloadBuffer,
+			               },
+			               sorterResource);
 
 			pCommandBuffer->CmdPipelineBarrier2(
 			    {},

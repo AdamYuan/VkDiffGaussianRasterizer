@@ -278,9 +278,9 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	    {});
 
 	// Sort
-	mSorter.CmdExecute(pCommandBuffer, {.pCountBuffer = resource.pDrawArgBuffer},
-	                   {.pKeyBuffer = resource.pSortKeyBuffer, .pPayloadBuffer = resource.pSortPayloadBuffer},
-	                   resource.sorterResource);
+	mSorter.CmdSort(pCommandBuffer, {.pCountBuffer = resource.pDrawArgBuffer},
+	                {.pKeyBuffer = resource.pSortKeyBuffer, .pPayloadBuffer = resource.pSortPayloadBuffer},
+	                resource.sorterResource);
 
 	// Read-After-Write Barriers for pSortPayloadBuffer, SplatView Buffers, SplatQuad Buffers
 	pCommandBuffer->CmdPipelineBarrier2(
