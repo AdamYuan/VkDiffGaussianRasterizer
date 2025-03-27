@@ -11,17 +11,14 @@
 #include <myvk/ImageBase.hpp>
 
 #include "DeviceSorter.hpp"
+#include "Camera.hpp"
 
 namespace VkGSRaster {
 
 class Rasterizer {
 public:
 	struct ForwardROArgs {
-		// Camera
-		uint32_t camWidth, camHeight;
-		float camTanFovX, camTanFovY;
-		std::array<float, 3 * 3> camViewMatrix;
-		std::array<float, 3> camPos;
+		Camera camera;
 
 		// Background
 		std::array<float, 3> bgColor;

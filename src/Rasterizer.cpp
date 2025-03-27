@@ -198,11 +198,10 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	PushConstantData pcData = {
 	    .bgColor = roArgs.bgColor,
 	    .splatCount = roArgs.splatCount,
-	    .camFocal = {float(roArgs.camWidth) * 0.5f / roArgs.camTanFovX,
-	                 float(roArgs.camHeight) * 0.5f / roArgs.camTanFovY},
-	    .camResolution = {roArgs.camWidth, roArgs.camHeight},
-	    .camPos = roArgs.camPos,
-	    .camViewMat = roArgs.camViewMatrix,
+	    .camFocal = {roArgs.camera.focalX, roArgs.camera.focalY},
+	    .camResolution = {roArgs.camera.width, roArgs.camera.height},
+	    .camPos = roArgs.camera.pos,
+	    .camViewMat = roArgs.camera.viewMat,
 	};
 	pCommandBuffer->CmdPushConstants(
 	    mpPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, //
@@ -314,14 +313,14 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	pCommandBuffer->CmdSetViewport({VkViewport{
 	    .x = 0,
 	    .y = 0,
-	    .width = (float)roArgs.camWidth,
-	    .height = (float)roArgs.camHeight,
+	    .width = (float)roArgs.camera.width,
+	    .height = (float)roArgs.camera.height,
 	    .minDepth = 0,
 	    .maxDepth = 0,
 	}});
 	pCommandBuffer->CmdSetScissor({VkRect2D{
 	    .offset = {},
-	    .extent = {.width = roArgs.camWidth, .height = roArgs.camHeight},
+	    .extent = {.width = roArgs.camera.width, .height = roArgs.camera.height},
 	}});
 	pCommandBuffer->CmdDrawIndirect(resource.pDrawArgBuffer, 0, 1);
 	pCommandBuffer->CmdEndRenderPass();
