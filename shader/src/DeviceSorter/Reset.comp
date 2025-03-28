@@ -5,18 +5,18 @@
 
 layout(local_size_x = RESET_DIM, local_size_y = 1, local_size_z = 1) in;
 
-layout(std430, binding = B_DISPATCH_ARGS_BINDING) writeonly buffer bDispatchArgs { uint gDispatchArgs[]; };
+layout(std430, binding = SBUF_DISPATCH_ARGS_BINDING) writeonly buffer bDispatchArgs { uint gDispatchArgs[]; };
 
-layout(std430, binding = B_PASS_HISTS_BINDING) writeonly buffer bPassHists {
+layout(std430, binding = SBUF_PASS_HISTS_BINDING) writeonly buffer bPassHists {
 	uint gPassHists[]; // Size: divCeil(gKeyCount, SORT_PART_SIZE) * RADIX * PASS_COUNT
 };
-layout(std430, binding = B_INDICES_BINDING) writeonly buffer bIndices {
+layout(std430, binding = SBUF_INDICES_BINDING) writeonly buffer bIndices {
 	uint gIndices[]; // Size: PASS_COUNT
 #if RESET_THREAD_COUNT < PASS_COUNT
 #error
 #endif
 };
-layout(std430, binding = B_GLOBAL_HISTS_BINDING) writeonly buffer bGlobalHists {
+layout(std430, binding = SBUF_GLOBAL_HISTS_BINDING) writeonly buffer bGlobalHists {
 	uint gGlobalHists[]; // Size: RADIX * PASS_COUNT
 #if RESET_THREAD_COUNT < (RADIX * PASS_COUNT)
 #error

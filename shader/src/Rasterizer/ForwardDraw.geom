@@ -17,7 +17,7 @@ out bOut {
 }
 gOut;
 
-layout(std430, binding = B_SORT_PAYLOADS_BINDING) readonly buffer bSortPayloads { uint gSortPayloads[]; };
+layout(std430, binding = SBUF_SORT_PAYLOADS_BINDING) readonly buffer bSortPayloads { uint gSortPayloads[]; };
 
 void main() {
 	uint splatIdx = gSortPayloads[gIn[0].instanceID];

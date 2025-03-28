@@ -26,7 +26,7 @@ Camera loadCamera() {
 	return cam;
 }
 
-layout(binding = B_SORT_COUNT_BINDING) uniform bSortCount {
+layout(binding = UBUF_SORT_COUNT_BINDING) uniform bSortCount {
 	layout(offset = SORT_COUNT_BUFFER_OFFSET) uint gSplatSortCount;
 };
 
@@ -39,11 +39,11 @@ struct SHStd430 {
 
 // Splat Load
 #ifdef RASTERIZER_LOAD_SPLAT
-layout(std430, binding = B_MEANS_BINDING) readonly buffer bMeans { Vec3Std430 gMeans[]; };
-layout(std430, binding = B_SCALES_BINDING) readonly buffer bScales { Vec3Std430 gScales[]; };
-layout(std430, binding = B_ROTATES_BINDING) readonly buffer bRotates { vec4 gRotates[]; };
-layout(std430, binding = B_OPACITIES_BINDING) readonly buffer bOpacities { float gOpacities[]; };
-layout(std430, binding = B_SHS_BINDING) readonly buffer bSHs { SHStd430 gSHs[]; };
+layout(std430, binding = SBUF_MEANS_BINDING) readonly buffer bMeans { Vec3Std430 gMeans[]; };
+layout(std430, binding = SBUF_SCALES_BINDING) readonly buffer bScales { Vec3Std430 gScales[]; };
+layout(std430, binding = SBUF_ROTATES_BINDING) readonly buffer bRotates { vec4 gRotates[]; };
+layout(std430, binding = SBUF_OPACITIES_BINDING) readonly buffer bOpacities { float gOpacities[]; };
+layout(std430, binding = SBUF_SHS_BINDING) readonly buffer bSHs { SHStd430 gSHs[]; };
 Splat loadSplat(uint splatIdx) {
 	Vec3Std430 mean = gMeans[splatIdx];
 	Vec3Std430 scale = gScales[splatIdx];
@@ -67,10 +67,10 @@ Splat loadSplat(uint splatIdx) {
 // SplatView Load
 #ifdef RASTERIZER_LOAD_SPLAT_VIEW
 #ifndef RASTERIZER_LOAD_SPLAT
-layout(std430, binding = B_OPACITIES_BINDING) readonly buffer bOpacities { float gOpacities[]; };
+layout(std430, binding = SBUF_OPACITIES_BINDING) readonly buffer bOpacities { float gOpacities[]; };
 #endif
-layout(std430, binding = B_COLORS_MEAN2DXS_BINDING) readonly buffer bColors_Mean2DXs { vec4 gColors_Mean2DXs[]; };
-layout(std430, binding = B_CONICS_MEAN2DYS_BINDING) readonly buffer bConics_Mean2DYs { vec4 gConics_Mean2DYs[]; };
+layout(std430, binding = SBUF_COLORS_MEAN2DXS_BINDING) readonly buffer bColors_Mean2DXs { vec4 gColors_Mean2DXs[]; };
+layout(std430, binding = SBUF_CONICS_MEAN2DYS_BINDING) readonly buffer bConics_Mean2DYs { vec4 gConics_Mean2DYs[]; };
 SplatView loadSplatView(uint splatIdx) {
 	float opacity = gOpacities[splatIdx];
 	vec4 colors_mean2Dxs = gColors_Mean2DXs[splatIdx];
@@ -87,7 +87,7 @@ SplatView loadSplatView(uint splatIdx) {
 
 // SplatQuad Load
 #ifdef RASTERIZER_LOAD_SPLAT_QUAD
-layout(std430, binding = B_QUADS_BINDING) readonly buffer bQuads { vec4 gQuads[]; };
+layout(std430, binding = SBUF_QUADS_BINDING) readonly buffer bQuads { vec4 gQuads[]; };
 SplatQuad loadSplatQuad(uint splatIdx) {
 	vec4 data = gQuads[splatIdx];
 	SplatQuad quad;
@@ -99,8 +99,8 @@ SplatQuad loadSplatQuad(uint splatIdx) {
 
 // SplatView Store
 #ifdef RASTERIZER_STORE_SPLAT_VIEW
-layout(std430, binding = B_COLORS_MEAN2DXS_BINDING) writeonly buffer bColors_Mean2DXs { vec4 gColors_Mean2DXs[]; };
-layout(std430, binding = B_CONICS_MEAN2DYS_BINDING) writeonly buffer bConics_Mean2DYs { vec4 gConics_Mean2DYs[]; };
+layout(std430, binding = SBUF_COLORS_MEAN2DXS_BINDING) writeonly buffer bColors_Mean2DXs { vec4 gColors_Mean2DXs[]; };
+layout(std430, binding = SBUF_CONICS_MEAN2DYS_BINDING) writeonly buffer bConics_Mean2DYs { vec4 gConics_Mean2DYs[]; };
 void storeSplatView(uint splatIdx, SplatView splatView) {
 	gColors_Mean2DXs[splatIdx] = vec4(splatView.color, splatView.geom.mean2D.x);
 	gConics_Mean2DYs[splatIdx] = vec4(splatView.geom.conic, splatView.geom.mean2D.y);
@@ -109,7 +109,7 @@ void storeSplatView(uint splatIdx, SplatView splatView) {
 
 // SplatQuad Store
 #ifdef RASTERIZER_STORE_SPLAT_QUAD
-layout(std430, binding = B_QUADS_BINDING) writeonly buffer bQuads { vec4 gQuads[]; };
+layout(std430, binding = SBUF_QUADS_BINDING) writeonly buffer bQuads { vec4 gQuads[]; };
 void storeSplatQuad(uint splatIdx, SplatQuad quad) { gQuads[splatIdx] = vec4(quad.axis1, quad.axis2); }
 #endif
 

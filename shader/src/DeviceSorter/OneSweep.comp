@@ -12,18 +12,18 @@ layout(local_size_x = SORT_DIM, local_size_y = 1, local_size_z = 1) in;
 
 #define WAVES_PER_GROUP (SORT_DIM / LANES_PER_WAVE)
 
-layout(std430, binding = B_PASS_HISTS_BINDING) coherent buffer bPassHists {
+layout(std430, binding = SBUF_PASS_HISTS_BINDING) coherent buffer bPassHists {
 	uint gPassHists[]; // Size: divCeil(gKeyCount, SORT_PART_SIZE) * RADIX * PASS_COUNT
 };
-layout(std430, binding = B_INDICES_BINDING) coherent buffer bIndices {
+layout(std430, binding = SBUF_INDICES_BINDING) coherent buffer bIndices {
 	uint gIndices[]; // Size: PASS_COUNT
 };
 
-layout(std430, binding = B_SRC_KEYS_BINDING) readonly buffer bSrcKeys { SortKey gSrcKeys[]; };
-layout(std430, binding = B_DST_KEYS_BINDING) writeonly buffer bDstKeys { SortKey gDstKeys[]; };
+layout(std430, binding = SBUF_SRC_KEYS_BINDING) readonly buffer bSrcKeys { SortKey gSrcKeys[]; };
+layout(std430, binding = SBUF_DST_KEYS_BINDING) writeonly buffer bDstKeys { SortKey gDstKeys[]; };
 
-layout(std430, binding = B_SRC_PAYLOADS_BINDING) readonly buffer bSrcPayloads { SortPayload gSrcPayloads[]; };
-layout(std430, binding = B_DST_PAYLOADS_BINDING) writeonly buffer bDstPayloads { SortPayload gDstPayloads[]; };
+layout(std430, binding = SBUF_SRC_PAYLOADS_BINDING) readonly buffer bSrcPayloads { SortPayload gSrcPayloads[]; };
+layout(std430, binding = SBUF_DST_PAYLOADS_BINDING) writeonly buffer bDstPayloads { SortPayload gDstPayloads[]; };
 
 layout(push_constant) uniform bPushConstant { uint gPassIdx, gRadixShift, gWriteKey; };
 

@@ -10,7 +10,7 @@ in bIn {
 }
 gIn;
 
-layout(rgba32f, binding = I_COLOR0_BINDING) coherent uniform image2D gColorT;
+layout(rgba32f, binding = SIMG_IMAGE0_BINDING) coherent uniform image2D gColorT;
 
 layout(pixel_interlock_ordered) in;
 
