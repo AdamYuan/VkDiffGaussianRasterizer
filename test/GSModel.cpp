@@ -70,6 +70,13 @@ GSModel GSModel::Load(const std::filesystem::path &filename) {
 	}
 
 	for (uint32_t splatIdx = 0; splatIdx < model.splatCount; ++splatIdx) {
+		auto &scale = model.scales[splatIdx];
+		scale[0] = std::abs(std::exp(scale[0]));
+		scale[1] = std::abs(std::exp(scale[1]));
+		scale[2] = std::abs(std::exp(scale[2]));
+	}
+
+	for (uint32_t splatIdx = 0; splatIdx < model.splatCount; ++splatIdx) {
 		auto &opacity = model.opacities[splatIdx];
 		const auto sigmoid = [](float x) { return 1.0f / (1.0f + std::exp(-x)); };
 		opacity = sigmoid(opacity);
@@ -86,6 +93,7 @@ GSModel GSModel::Load(const std::filesystem::path &filename) {
 		rotate[1] *= invLen;
 		rotate[2] *= invLen;
 		rotate[3] *= invLen;
+		rotate = {rotate[1], rotate[2], rotate[3], rotate[0]};
 	}
 
 	return model;
