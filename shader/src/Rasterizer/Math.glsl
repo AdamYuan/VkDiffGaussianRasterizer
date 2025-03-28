@@ -380,7 +380,7 @@ SplatView splat2splatView(Splat splat_0, Camera camera_0, out SplatQuad o_splatQ
 	mat2x2 _S64 = mat2x2(_S63[0].xy, _S63[1].xy);
 	vec3 cov2D_0 = vec3(_S64[0][0], _S64[0][1], _S64[1][1]) + vec3(0.30000001192092896, 0.0, 0.30000001192092896);
 	SplatView splatView_0;
-	splatView_0.geom.mean2D = projMean_0 + camHalfRes_0;
+	splatView_0.geom.mean2D = projMean_0;
 	splatView_0.geom.conic = cov2conic_0(cov2D_0);
 	splatView_0.geom.opacity = splat_0.geom.opacity;
 	splatView_0.color = sh2color_0(splat_0.sh, normalize(camMean_0));
@@ -986,17 +986,33 @@ bool behindFrustum(Splat splat_2, Camera camera_6, out float o_viewMeanZ_0) {
 	o_viewMeanZ_0 = _S356;
 	return _S356 < 0.20000000298023224;
 }
-bool inFrustum(SplatViewGeom splatViewGeom_2, SplatQuad splatQuad_0, Camera camera_7) { return true; }
+bool inFrustum(SplatViewGeom splatViewGeom_2, SplatQuad splatQuad_0, Camera camera_7) {
+	vec2 camHalfRes_2 = vec2(camera_7.resolution) * 0.5;
+	bool _S357;
+	if ((any(bvec2((lessThan(splatViewGeom_2.mean2D, -1.29999995231628418 * camHalfRes_2)))))) {
+		_S357 = true;
+	} else {
+		_S357 = (any(bvec2((greaterThan(splatViewGeom_2.mean2D, 1.29999995231628418 * camHalfRes_2)))));
+	}
+	if (_S357) {
+		return false;
+	}
+	return true;
+}
 float opacity2quadBound(float opacity) { return sqrt(2.0 * (5.54126358032226562 + log(opacity))); }
 vec2 pos2D2clip(vec2 pos, Camera camera_8) {
-	return vec2(float(camera_8.resolution.y) - pos.y) * (1.0 / vec2(camera_8.resolution)) * 2.0 - 1.0;
+	vec2 _S358 = pos;
+	_S358[1] = -pos.y;
+	vec2 _S359 = _S358 * (2.0 / vec2(camera_8.resolution));
+	_S358 = _S359;
+	return _S359;
 }
 vec2 axis2D2clip(vec2 axis_0, Camera camera_9) {
-	vec2 _S357 = axis_0;
-	_S357[1] = -axis_0.y;
-	vec2 _S358 = _S357 * (1.0 / vec2(camera_9.resolution)) * 2.0;
-	_S357 = _S358;
-	return _S358;
+	vec2 _S360 = axis_0;
+	_S360[1] = -axis_0.y;
+	vec2 _S361 = _S360 * (2.0 / vec2(camera_9.resolution));
+	_S360 = _S361;
+	return _S361;
 }
 float quadPos2alpha(vec2 quadPos_0, float opacity) { return opacity * exp(-0.5 * dot(quadPos_0, quadPos_0)); }
 #endif

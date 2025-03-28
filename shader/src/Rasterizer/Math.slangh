@@ -165,7 +165,7 @@ SplatView splat2splatView(Splat splat, no_diff Camera camera, no_diff out SplatQ
 	cov2D += float3(0.3, 0, 0.3);
 
 	SplatView splatView;
-	splatView.geom.mean2D = projMean + camHalfRes;
+	splatView.geom.mean2D = projMean;
 	splatView.geom.conic = cov2conic(cov2D);
 	splatView.geom.opacity = splat.geom.opacity;
 	splatView.color = sh2color(splat.sh, normalize(camMean));
@@ -215,6 +215,9 @@ bool behindFrustum(Splat splat, Camera camera, out float o_viewMeanZ) {
 
 [noinline]
 bool inFrustum(SplatViewGeom splatViewGeom, SplatQuad splatQuad, Camera camera) {
+	float2 camHalfRes = float2(camera.resolution) * 0.5;
+	if (any(splatViewGeom.mean2D < -1.3 * camHalfRes) || any(splatViewGeom.mean2D > 1.3 * camHalfRes))
+		return false;
 	// TODO: Implement this
 	return true;
 }
@@ -227,16 +230,14 @@ float opacity2quadBound(float opacity) {
 
 [noinline]
 float2 pos2D2clip(float2 pos, Camera camera) {
-	pos = float(camera.resolution.y) - pos.y;
-	pos = pos * (1.0 / float2(camera.resolution));
-	pos = pos * 2.0 - 1.0;
+	pos.y = -pos.y;
+	pos = pos * (2.0 / float2(camera.resolution));
 	return pos;
 }
 
 [noinline]
 float2 axis2D2clip(float2 axis, Camera camera) {
 	axis.y = -axis.y;
-	axis = axis * (1.0 / float2(camera.resolution));
-	axis = axis * 2.0;
+	axis = axis * (2.0 / float2(camera.resolution));
 	return axis;
 }
