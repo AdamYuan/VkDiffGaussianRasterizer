@@ -27,7 +27,7 @@ void main() {
 	Splat splat = loadSplat(splatIdx);
 	Camera camera = loadCamera();
 
-	if (splat.geom.opacity <= 0.0)
+	if (splat.geom.opacity <= ALPHA_MIN)
 		return;
 
 	float viewMeanZ;
@@ -44,6 +44,6 @@ void main() {
 	storeSplatView(splatIdx, splatView);
 	storeSplatQuad(splatIdx, splatQuad);
 
-	gSortKeys[sortIdx] = float2CmpUint(viewMeanZ);
+	gSortKeys[sortIdx] = float2CmpUint(-viewMeanZ);
 	gSortPayloads[sortIdx] = splatIdx;
 }
