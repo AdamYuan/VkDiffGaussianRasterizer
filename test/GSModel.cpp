@@ -93,7 +93,6 @@ GSModel GSModel::Load(const std::filesystem::path &filename) {
 		rotate[1] *= invLen;
 		rotate[2] *= invLen;
 		rotate[3] *= invLen;
-		rotate = {rotate[1], rotate[2], rotate[3], rotate[0]};
 	}
 
 	return model;

@@ -92,10 +92,10 @@ float3 sh2color(SH sh, float3 dir) {
 
 [Differentiable]
 float3x3 quat2matrix(float4 quat) {
-	float x = quat.x;
-	float y = quat.y;
-	float z = quat.z;
-	float w = quat.w;
+	float x = quat[1];
+	float y = quat[2];
+	float z = quat[3];
+	float w = quat[0];
 	return float3x3(float3(1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)),
 	                float3(2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)),
 	                float3(2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)));
