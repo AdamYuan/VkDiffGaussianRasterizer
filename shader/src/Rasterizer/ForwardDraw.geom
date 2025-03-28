@@ -13,7 +13,7 @@ gIn[];
 out bOut {
 	layout(location = 0) flat float opacity;
 	layout(location = 1) flat vec3 color;
-	layout(location = 2) smooth vec2 quadPos;
+	layout(location = 2) noperspective vec2 quadPos;
 }
 gOut;
 
@@ -33,19 +33,24 @@ void main() {
 
 	gOut.opacity = splatView.geom.opacity;
 	gOut.color = splatView.color;
-
 	gOut.quadPos = vec2(-quadBound, -quadBound);
 	gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, 0, 1);
 	EmitVertex();
 
+	gOut.opacity = splatView.geom.opacity;
+	gOut.color = splatView.color;
 	gOut.quadPos = vec2(quadBound, -quadBound);
 	gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, 0, 1);
 	EmitVertex();
 
+	gOut.opacity = splatView.geom.opacity;
+	gOut.color = splatView.color;
 	gOut.quadPos = vec2(-quadBound, quadBound);
 	gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, 0, 1);
 	EmitVertex();
 
+	gOut.opacity = splatView.geom.opacity;
+	gOut.color = splatView.color;
 	gOut.quadPos = vec2(quadBound, quadBound);
 	gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, 0, 1);
 	EmitVertex();

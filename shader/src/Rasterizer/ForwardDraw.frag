@@ -5,7 +5,7 @@
 in bIn {
 	layout(location = 0) flat float opacity;
 	layout(location = 1) flat vec3 color;
-	layout(location = 2) smooth vec2 quadPos;
+	layout(location = 2) noperspective vec2 quadPos;
 }
 gIn;
 
