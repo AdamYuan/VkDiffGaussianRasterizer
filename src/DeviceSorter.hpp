@@ -68,13 +68,13 @@ public:
 	void CmdSort(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const ROArgs &roArgs, const RWArgs &rwArgs,
 	             const Resource &resource) const;
 
-	// RWArgs must be visible to GetSrcRWArgsSync() before CmdExecute()
+	// RWArgs must be visible to GetSrcRWArgsSync() before CmdSort()
 	static const RWArgsSyncState &GetSrcRWArgsSync();
 
 	// RWArgs' later access must make GetDstRWArgsSync() available
 	static const RWArgsSyncState &GetDstRWArgsSync();
 
-	// ROArgs must be visible to GetROArgsSync() before CmdExecute()
+	// ROArgs must be visible to GetROArgsSync() before CmdSort()
 	static const ROArgsSyncState &GetROArgsSync();
 
 	static const ArgsUsage &GetArgsUsage();
