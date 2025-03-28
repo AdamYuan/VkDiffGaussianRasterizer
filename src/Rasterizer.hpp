@@ -10,21 +10,19 @@
 #include <myvk/GraphicsPipeline.hpp>
 #include <myvk/ImageBase.hpp>
 
-#include "DeviceSorter.hpp"
 #include "Camera.hpp"
+#include "DeviceSorter.hpp"
 
 namespace VkGSRaster {
 
 class Rasterizer {
 public:
-	struct ForwardROArgs {
-		Camera camera;
+	struct Config {
+		bool forwardOutputImage = false;
+	};
 
-		// Background
-		std::array<float, 3> bgColor;
-
-		// Splats
-		uint32_t splatCount;
+	struct SplatArgs {
+		uint32_t count{};
 		myvk::Ptr<myvk::BufferBase> pMeanBuffer;    // P * [float3]
 		myvk::Ptr<myvk::BufferBase> pScaleBuffer;   // P * [float3]
 		myvk::Ptr<myvk::BufferBase> pRotateBuffer;  // P * [float4]
@@ -32,8 +30,29 @@ public:
 		myvk::Ptr<myvk::BufferBase> pSHBuffer;      // P * [M * float3]
 	};
 
-	struct ForwardRWArgs {
+	struct FwdROArgs {
+		Camera camera{};
+		SplatArgs splats{};
+		std::array<float, 3> bgColor{};
+	};
+	struct FwdROArgsSyncState {
+		myvk::BufferSyncState splatBuffers;
+		myvk::BufferSyncState splatOpacityBuffer;
+	};
+
+	struct FwdRWArgs {
 		myvk::Ptr<myvk::BufferBase> pOutColorBuffer;
+		myvk::Ptr<myvk::ImageBase> pOutColorImage;
+	};
+	struct FwdRWArgsSyncState {
+		myvk::BufferSyncState outColorBuffer;
+		myvk::ImageSyncState outColorImage;
+	};
+
+	struct FwdArgsUsage {
+		VkBufferUsageFlags splatBuffers;
+		VkBufferUsageFlags outColorBuffer;
+		VkImageUsageFlags outColorImage;
 	};
 
 	struct Resource {
@@ -55,6 +74,8 @@ public:
 	};
 
 private:
+	Config mConfig;
+
 	DeviceSorter mSorter;
 
 	myvk::Ptr<myvk::PipelineLayout> mpPipelineLayout;
@@ -70,10 +91,17 @@ private:
 
 public:
 	Rasterizer() = default;
-	explicit Rasterizer(const myvk::Ptr<myvk::Device> &pDevice);
+	explicit Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &config);
 
-	void CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const ForwardROArgs &roArgs,
-	                const ForwardRWArgs &rwArgs, const Resource &resource) const;
+	const Config &GetConfig() const { return mConfig; }
+
+	void CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const FwdROArgs &roArgs,
+	                const FwdRWArgs &rwArgs, const Resource &resource) const;
+
+	static const FwdRWArgsSyncState &GetSrcFwdRWArgsSync();
+	static const FwdRWArgsSyncState &GetDstFwdRWArgsSync();
+	static const FwdROArgsSyncState &GetFwdROArgsSync();
+	static const FwdArgsUsage &GetFwdArgsUsage();
 };
 
 } // namespace VkGSRaster

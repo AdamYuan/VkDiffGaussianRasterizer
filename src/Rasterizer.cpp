@@ -35,8 +35,11 @@ void Rasterizer::Resource::updateBuffer(const myvk::Ptr<myvk::Device> &pDevice, 
 }
 void Rasterizer::Resource::updateImage(const myvk::Ptr<myvk::Device> &pDevice, uint32_t width, uint32_t height,
                                        const Rasterizer &rasterizer) {
-	if (ResizeImage<VK_FORMAT_R32G32B32A32_SFLOAT>(pDevice, pColorImage, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, //
-	                                               width, height)) {
+	VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+	if (rasterizer.GetConfig().forwardOutputImage)
+		usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+
+	if (ResizeImage<VK_FORMAT_R32G32B32A32_SFLOAT>(pDevice, pColorImage, usage, width, height)) {
 		pColorForwardFramebuffer = myvk::Framebuffer::Create(
 		    rasterizer.mpForwardRenderPass, myvk::ImageView::Create(pColorImage, VK_IMAGE_VIEW_TYPE_2D));
 	}
@@ -53,7 +56,8 @@ struct PushConstantData {
 };
 } // namespace
 
-Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice) : mSorter{pDevice, {.useKeyAsPayload = false}} {
+Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &config)
+    : mConfig{config}, mSorter{pDevice, {.useKeyAsPayload = false}} {
 	auto pDescriptorSetLayout = myvk::DescriptorSetLayout::Create( //
 	    pDevice,
 	    std::vector<VkDescriptorSetLayoutBinding>{
@@ -122,20 +126,33 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice) : mSorter{pDevice
 	// Forward RenderPass
 	mpForwardRenderPass = myvk::RenderPass::Create(pDevice, [&] {
 		myvk::RenderPassState2 state;
-		state
-		    .SetAttachmentCount(1)
-		    // TODO: Modify store layout
+		state.SetAttachmentCount(1)
 		    .SetAttachment(0, VK_FORMAT_R32G32B32A32_SFLOAT, {.op = VK_ATTACHMENT_LOAD_OP_CLEAR},
-		                   {.op = VK_ATTACHMENT_STORE_OP_STORE, .layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL})
+		                   {
+		                       .op = VK_ATTACHMENT_STORE_OP_STORE,
+		                       .layout = mConfig.forwardOutputImage ? VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+		                                                            : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		                   })
 		    .SetSubpassCount(1)
 		    .SetSubpass(
 		        0, {.color_attachment_refs = {{.attachment = 0, .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}}})
-		    .SetDependencyCount(1)
+		    .SetDependencyCount(2)
 		    .SetSrcExternalDependency(
-		        0, {VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, 0},
+		        0,
+		        {
+		            mConfig.forwardOutputImage ? VK_PIPELINE_STAGE_2_BLIT_BIT : VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+		            0,
+		        },
 		        {.subpass = 0,
-		         .sync = myvk::GetAttachmentLoadOpSync(VK_IMAGE_ASPECT_COLOR_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR)});
-		// TODO: Add Dst External Dependency
+		         .sync = myvk::GetAttachmentLoadOpSync(VK_IMAGE_ASPECT_COLOR_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR)})
+		    .SetDstExternalDependency(
+		        1,
+		        {.subpass = 0,
+		         .sync = myvk::GetAttachmentStoreOpSync(VK_IMAGE_ASPECT_COLOR_BIT, VK_ATTACHMENT_STORE_OP_STORE)},
+		        {
+		            mConfig.forwardOutputImage ? VK_PIPELINE_STAGE_2_BLIT_BIT : VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+		            mConfig.forwardOutputImage ? VK_ACCESS_2_TRANSFER_READ_BIT : VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+		        });
 		return state;
 	}());
 
@@ -167,22 +184,21 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice) : mSorter{pDevice
 		    state.m_viewport_state.Enable();
 		    state.m_vertex_input_state.Enable();
 		    state.m_input_assembly_state.Enable(VK_PRIMITIVE_TOPOLOGY_POINT_LIST);
-		    state.m_rasterization_state.Initialize(VK_POLYGON_MODE_FILL, VK_FRONT_FACE_COUNTER_CLOCKWISE,
-		                                           VK_CULL_MODE_NONE);
+		    state.m_rasterization_state.Initialize(VK_POLYGON_MODE_FILL, VK_FRONT_FACE_CLOCKWISE, VK_CULL_MODE_NONE);
 		    state.m_multisample_state.Enable(VK_SAMPLE_COUNT_1_BIT);
 		    return state;
 	    }(),
 	    0);
 }
 
-void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const ForwardROArgs &roArgs,
-                            const ForwardRWArgs &rwArgs, const Resource &resource) const {
+void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const FwdROArgs &roArgs,
+                            const FwdRWArgs &rwArgs, const Resource &resource) const {
 	std::vector kDescriptorSetWrites = {
-	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.pMeanBuffer, B_MEANS_BINDING),
-	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.pScaleBuffer, B_SCALES_BINDING),
-	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.pRotateBuffer, B_ROTATES_BINDING),
-	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.pOpacityBuffer, B_OPACITIES_BINDING),
-	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.pSHBuffer, B_SHS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.splats.pMeanBuffer, B_MEANS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.splats.pScaleBuffer, B_SCALES_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.splats.pRotateBuffer, B_ROTATES_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.splats.pOpacityBuffer, B_OPACITIES_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.splats.pSHBuffer, B_SHS_BINDING),
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pSortKeyBuffer, B_SORT_KEYS_BINDING),
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pSortPayloadBuffer, B_SORT_PAYLOADS_BINDING),
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pColorMean2DXBuffer, B_COLORS_MEAN2DXS_BINDING),
@@ -197,7 +213,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	// Push Constant
 	PushConstantData pcData = {
 	    .bgColor = roArgs.bgColor,
-	    .splatCount = roArgs.splatCount,
+	    .splatCount = roArgs.splats.count,
 	    .camFocal = {roArgs.camera.focalX, roArgs.camera.focalY},
 	    .camResolution = {roArgs.camera.width, roArgs.camera.height},
 	    .camPos = roArgs.camera.pos,
@@ -253,7 +269,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	    },
 	    {});
 	pCommandBuffer->CmdBindPipeline(mpForwardViewPipeline);
-	pCommandBuffer->CmdDispatch((roArgs.splatCount + FORWARD_VIEW_DIM - 1) / FORWARD_VIEW_DIM, 1, 1);
+	pCommandBuffer->CmdDispatch((roArgs.splats.count + FORWARD_VIEW_DIM - 1) / FORWARD_VIEW_DIM, 1, 1);
 
 	// Prepare for Sort (+ Read-After-Write Barrier for pDrawArgBuffer)
 	pCommandBuffer->CmdPipelineBarrier2( //
@@ -323,9 +339,57 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	    .extent = {.width = roArgs.camera.width, .height = roArgs.camera.height},
 	}});
 	pCommandBuffer->CmdDrawIndirect(resource.pDrawArgBuffer, 0, 1);
+	// pCommandBuffer->CmdDraw(1, 1, 0, 0);
 	pCommandBuffer->CmdEndRenderPass();
 
-	// TODO: Copy to rwArgs.
+	if (mConfig.forwardOutputImage) {
+		pCommandBuffer->CmdBlitImage(resource.pColorImage, rwArgs.pOutColorImage,
+		                             {
+		                                 .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+		                                 .srcOffsets = {{}, {(int)roArgs.camera.width, (int)roArgs.camera.height, 1u}},
+		                                 .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+		                                 .dstOffsets = {{}, {(int)roArgs.camera.width, (int)roArgs.camera.height, 1u}},
+		                             },
+		                             VK_FILTER_NEAREST);
+	} else {
+		// TODO: Copy to rwArgs.pColorBuffer
+	}
+}
+
+const Rasterizer::FwdRWArgsSyncState &Rasterizer::GetSrcFwdRWArgsSync() {
+	static constexpr FwdRWArgsSyncState kSync = {
+	    .outColorBuffer = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	    .outColorImage = {VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+	                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
+	};
+	return kSync;
+}
+const Rasterizer::FwdRWArgsSyncState &Rasterizer::GetDstFwdRWArgsSync() {
+	// Identical to GetSrcFwdRWArgsSync
+	static constexpr FwdRWArgsSyncState kSync = {
+	    .outColorBuffer = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	    .outColorImage = {VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+	                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
+	};
+	return kSync;
+}
+const Rasterizer::FwdROArgsSyncState &Rasterizer::GetFwdROArgsSync() {
+
+	static constexpr FwdROArgsSyncState kSync = {
+	    .splatBuffers = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT},
+	    // Opacity buffer is additionally read in Geometry Shader (as SplatView.opacity)
+	    .splatOpacityBuffer = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT,
+	                           VK_ACCESS_2_SHADER_STORAGE_READ_BIT},
+	};
+	return kSync;
+}
+const Rasterizer::FwdArgsUsage &Rasterizer::GetFwdArgsUsage() {
+	static constexpr FwdArgsUsage kUsage = {
+	    .splatBuffers = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+	    .outColorBuffer = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+	    .outColorImage = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+	};
+	return kUsage;
 }
 
 } // namespace VkGSRaster

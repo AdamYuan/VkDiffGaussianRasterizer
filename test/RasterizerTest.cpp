@@ -10,11 +10,13 @@
 #include <myvk/QueueSelector.hpp>
 #include <tinyfiledialogs.h>
 
-constexpr uint32_t kFrameCount = 3, kWidth = 720, kHeight = 720;
+constexpr uint32_t kFrameCount = 3, kWidth = 1280, kHeight = 720;
 constexpr uint32_t kMaxSortKeyCount = 1000000;
 
 int main() {
-	GLFWwindow *pWindow = myvk::GLFWCreateWindow("Test", 1280, 720, true);
+	using VkGSRaster::Rasterizer;
+
+	GLFWwindow *pWindow = myvk::GLFWCreateWindow("Test", kWidth, kHeight, false);
 
 	myvk::Ptr<myvk::Device> pDevice;
 	myvk::Ptr<myvk::Queue> pGenericQueue;
@@ -31,21 +33,25 @@ int main() {
 		    {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME});
 	}
 
-	auto pFrameManager = myvk::FrameManager::Create(pGenericQueue, pPresentQueue, false, kFrameCount);
+	auto pFrameManager =
+	    myvk::FrameManager::Create(pGenericQueue, pPresentQueue, false, kFrameCount,
+	                               VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | Rasterizer::GetFwdArgsUsage().outColorImage);
 
 	auto pRenderPass = myvk::RenderPass::Create(pDevice, [&] {
 		myvk::RenderPassState2 state;
 		state.SetAttachmentCount(1)
-		    .SetAttachment(0, pFrameManager->GetSwapchain()->GetImageFormat(), {.op = VK_ATTACHMENT_LOAD_OP_CLEAR},
-		                   {.op = VK_ATTACHMENT_STORE_OP_STORE, .layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR})
+		    .SetAttachment(
+		        0, pFrameManager->GetSwapchain()->GetImageFormat(),
+		        {.op = VK_ATTACHMENT_LOAD_OP_LOAD, .layout = Rasterizer::GetDstFwdRWArgsSync().outColorImage.layout},
+		        {.op = VK_ATTACHMENT_STORE_OP_STORE, .layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR})
 		    .SetSubpassCount(1)
 		    .SetSubpass(
 		        0, {.color_attachment_refs = {{.attachment = 0, .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}}})
 		    .SetDependencyCount(1)
 		    .SetSrcExternalDependency(
-		        0, {VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, 0},
+		        0, myvk::SyncStateCast<myvk::MemorySyncState>(Rasterizer::GetDstFwdRWArgsSync().outColorImage),
 		        {.subpass = 0,
-		         .sync = myvk::GetAttachmentLoadOpSync(VK_IMAGE_ASPECT_COLOR_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR)});
+		         .sync = myvk::GetAttachmentLoadOpSync(VK_IMAGE_ASPECT_COLOR_BIT, VK_ATTACHMENT_LOAD_OP_LOAD)});
 		return state;
 	}());
 
@@ -58,11 +64,9 @@ int main() {
 		pFramebuffer = myvk::ImagelessFramebuffer::Create(pRenderPass, {pFrameManager->GetSwapchainImageViews()[0]});
 	});
 
-	using VkGSRaster::Rasterizer;
-	Rasterizer rasterizer{pDevice};
+	Rasterizer rasterizer{pDevice, {.forwardOutputImage = true}};
 	Rasterizer::Resource rasterizerResource;
 
-	rasterizerResource.updateBuffer(pDevice, kMaxSortKeyCount);
 	rasterizerResource.updateImage(pDevice, kWidth, kHeight, rasterizer);
 
 	VkGSModel vkGsModel{};
@@ -80,9 +84,12 @@ int main() {
 				static constexpr const char *kFilterPatterns[kFilterCount] = {"*.ply"};
 				const char *filename =
 				    tinyfd_openFileDialog("Open GS Model", "", kFilterCount, kFilterPatterns, nullptr, false);
-				if (filename)
+				if (filename) {
 					vkGsModel =
 					    VkGSModel::Create(pGenericQueue, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, GSModel::Load(filename));
+					if (!vkGsModel.IsEmpty())
+						rasterizerResource.updateBuffer(pDevice, vkGsModel.splatCount);
+				}
 			}
 			ImGui::Text("Splat Count: %u", vkGsModel.splatCount);
 			ImGui::End();
@@ -93,12 +100,48 @@ int main() {
 		if (pFrameManager->NewFrame()) {
 			uint32_t currentFrame = pFrameManager->GetCurrentFrame();
 			const auto &pCommandBuffer = pFrameManager->GetCurrentCommandBuffer();
+			const auto &pSwapchainImage = pFrameManager->GetCurrentSwapchainImage();
+			const auto &pSwapchainImageView = pFrameManager->GetCurrentSwapchainImageView();
 
 			pCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-			pCommandBuffer->CmdBeginRenderPass(pRenderPass, pFramebuffer,
-			                                   {pFrameManager->GetCurrentSwapchainImageView()},
-			                                   {{{0.5f, 0.5f, 0.5f, 1.0f}}});
+			pCommandBuffer->CmdPipelineBarrier2(
+			    {}, {},
+			    {
+			        pSwapchainImage->GetMemoryBarrier2({VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT},
+			                                           Rasterizer::GetSrcFwdRWArgsSync().outColorImage),
+			    });
+
+			if (!vkGsModel.IsEmpty()) {
+				rasterizer.CmdForward(pCommandBuffer,
+				                      {
+				                          .camera =
+				                              {
+				                                  .width = kWidth,
+				                                  .height = kHeight,
+				                                  .focalX = float(kHeight),
+				                                  .focalY = float(kHeight),
+				                                  .viewMat = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f},
+				                                  .pos = {0.0f, 0.0f, 0.0f},
+				                              },
+				                          .splats =
+				                              {
+				                                  .count = vkGsModel.splatCount,
+				                                  .pMeanBuffer = vkGsModel.pMeanBuffer,
+				                                  .pScaleBuffer = vkGsModel.pScaleBuffer,
+				                                  .pRotateBuffer = vkGsModel.pRotateBuffer,
+				                                  .pOpacityBuffer = vkGsModel.pOpacityBuffer,
+				                                  .pSHBuffer = vkGsModel.pSHBuffer,
+				                              },
+				                          .bgColor = {1.0f, 1.0f, 1.0f},
+				                      },
+				                      {
+				                          .pOutColorImage = pSwapchainImage,
+				                      },
+				                      rasterizerResource);
+			}
+
+			pCommandBuffer->CmdBeginRenderPass(pRenderPass, pFramebuffer, {pSwapchainImageView}, {{{}}});
 			pImGuiRenderer->CmdDrawPipeline(pCommandBuffer, currentFrame);
 			pCommandBuffer->CmdEndRenderPass();
 
