@@ -66,7 +66,9 @@ public:
 		myvk::Ptr<myvk::BufferBase> pDispatchArgBuffer;                 // uint3
 
 		myvk::Ptr<myvk::ImageBase> pColorImage; // W * H * [float4]
-		myvk::Ptr<myvk::Framebuffer> pColorForwardFramebuffer;
+		myvk::Ptr<myvk::ImageView> pColorImageView;
+
+		myvk::Ptr<myvk::Framebuffer> pForwardFramebuffer;
 
 		void updateBuffer(const myvk::Ptr<myvk::Device> &pDevice, uint32_t splatCount, double growFactor = 1.5);
 		void updateImage(const myvk::Ptr<myvk::Device> &pDevice, uint32_t width, uint32_t height,

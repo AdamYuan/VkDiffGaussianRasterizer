@@ -35,13 +35,13 @@ void Rasterizer::Resource::updateBuffer(const myvk::Ptr<myvk::Device> &pDevice, 
 }
 void Rasterizer::Resource::updateImage(const myvk::Ptr<myvk::Device> &pDevice, uint32_t width, uint32_t height,
                                        const Rasterizer &rasterizer) {
-	VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+	VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT;
 	if (rasterizer.GetConfig().forwardOutputImage)
 		usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
 	if (ResizeImage<VK_FORMAT_R32G32B32A32_SFLOAT>(pDevice, pColorImage, usage, width, height)) {
-		pColorForwardFramebuffer = myvk::Framebuffer::Create(
-		    rasterizer.mpForwardRenderPass, myvk::ImageView::Create(pColorImage, VK_IMAGE_VIEW_TYPE_2D));
+		pColorImageView = myvk::ImageView::Create(pColorImage, VK_IMAGE_VIEW_TYPE_2D);
+		pForwardFramebuffer = myvk::Framebuffer::Create(rasterizer.mpForwardRenderPass, {}, {width, height});
 	}
 }
 
@@ -112,6 +112,11 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 	         .descriptorCount = 1u,
 	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+
+	        {.binding = I_COLOR0_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
 	    },
 	    VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR);
 
@@ -126,33 +131,7 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	// Forward RenderPass
 	mpForwardRenderPass = myvk::RenderPass::Create(pDevice, [&] {
 		myvk::RenderPassState2 state;
-		state.SetAttachmentCount(1)
-		    .SetAttachment(0, VK_FORMAT_R32G32B32A32_SFLOAT, {.op = VK_ATTACHMENT_LOAD_OP_CLEAR},
-		                   {
-		                       .op = VK_ATTACHMENT_STORE_OP_STORE,
-		                       .layout = mConfig.forwardOutputImage ? VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-		                                                            : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		                   })
-		    .SetSubpassCount(1)
-		    .SetSubpass(
-		        0, {.color_attachment_refs = {{.attachment = 0, .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}}})
-		    .SetDependencyCount(2)
-		    .SetSrcExternalDependency(
-		        0,
-		        {
-		            mConfig.forwardOutputImage ? VK_PIPELINE_STAGE_2_BLIT_BIT : VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-		            0,
-		        },
-		        {.subpass = 0,
-		         .sync = myvk::GetAttachmentLoadOpSync(VK_IMAGE_ASPECT_COLOR_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR)})
-		    .SetDstExternalDependency(
-		        1,
-		        {.subpass = 0,
-		         .sync = myvk::GetAttachmentStoreOpSync(VK_IMAGE_ASPECT_COLOR_BIT, VK_ATTACHMENT_STORE_OP_STORE)},
-		        {
-		            mConfig.forwardOutputImage ? VK_PIPELINE_STAGE_2_BLIT_BIT : VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-		            mConfig.forwardOutputImage ? VK_ACCESS_2_TRANSFER_READ_BIT : VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-		        });
+		state.SetAttachmentCount(0).SetSubpassCount(1).SetSubpass(0, {}).SetDependencyCount(0);
 		return state;
 	}());
 
@@ -170,17 +149,7 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	    [] {
 		    myvk::GraphicsPipelineState state{};
 		    state.m_dynamic_state.Enable({VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
-		    state.m_color_blend_state.Enable({VkPipelineColorBlendAttachmentState{
-		        .blendEnable = VK_TRUE,
-		        .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-		        .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-		        .colorBlendOp = VK_BLEND_OP_ADD,
-		        .srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
-		        .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-		        .alphaBlendOp = VK_BLEND_OP_ADD,
-		        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
-		                          VK_COLOR_COMPONENT_A_BIT,
-		    }});
+		    state.m_color_blend_state.Enable(0, VK_FALSE);
 		    state.m_viewport_state.Enable();
 		    state.m_vertex_input_state.Enable();
 		    state.m_input_assembly_state.Enable(VK_PRIMITIVE_TOPOLOGY_POINT_LIST);
@@ -205,7 +174,8 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pConicMean2DYBuffer, B_CONICS_MEAN2DYS_BINDING),
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pQuadBuffer, B_QUADS_BINDING),
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pDrawArgBuffer, B_DRAW_ARGS_BINDING),
-	    myvk::DescriptorSetWrite::WriteUniformBuffer(nullptr, resource.pDrawArgBuffer, B_SORT_COUNT_BINDING),
+	    // myvk::DescriptorSetWrite::WriteUniformBuffer(nullptr, resource.pDrawArgBuffer, B_SORT_COUNT_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageImage(nullptr, resource.pColorImageView, I_COLOR0_BINDING),
 	};
 	pCommandBuffer->CmdPushDescriptorSet(mpPipelineLayout, VK_PIPELINE_BIND_POINT_COMPUTE, 0, kDescriptorSetWrites);
 	pCommandBuffer->CmdPushDescriptorSet(mpPipelineLayout, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, kDescriptorSetWrites);
@@ -322,9 +292,32 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	    },
 	    {});
 
+	// Clear Color Image
+	pCommandBuffer->CmdPipelineBarrier2(
+	    {}, {},
+	    {
+	        resource.pColorImage->GetMemoryBarrier2(
+	            {
+	                mConfig.forwardOutputImage ? VK_PIPELINE_STAGE_2_BLIT_BIT : VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+	            },
+	            {VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL}),
+	    });
+	pCommandBuffer->CmdClearColorImage(resource.pColorImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+	                                   {roArgs.bgColor[0], roArgs.bgColor[1], roArgs.bgColor[2], 1.0f});
+
 	// Draw
-	pCommandBuffer->CmdBeginRenderPass(mpForwardRenderPass, resource.pColorForwardFramebuffer,
-	                                   {{{roArgs.bgColor[0], roArgs.bgColor[1], roArgs.bgColor[2], 1.0f}}});
+	pCommandBuffer->CmdPipelineBarrier2(
+	    {}, {},
+	    {
+	        resource.pColorImage->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
+	            {
+	                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+	                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+	                VK_IMAGE_LAYOUT_GENERAL,
+	            }),
+	    });
+	pCommandBuffer->CmdBeginRenderPass(mpForwardRenderPass, resource.pForwardFramebuffer, {});
 	pCommandBuffer->CmdBindPipeline(mpForwardDrawPipeline);
 	pCommandBuffer->CmdSetViewport({VkViewport{
 	    .x = 0,
@@ -343,6 +336,20 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	pCommandBuffer->CmdEndRenderPass();
 
 	if (mConfig.forwardOutputImage) {
+		pCommandBuffer->CmdPipelineBarrier2({}, {},
+		                                    {
+		                                        resource.pColorImage->GetMemoryBarrier2(
+		                                            {
+		                                                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+		                                                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+		                                                VK_IMAGE_LAYOUT_GENERAL,
+		                                            },
+		                                            {
+		                                                VK_PIPELINE_STAGE_2_BLIT_BIT,
+		                                                VK_ACCESS_2_TRANSFER_READ_BIT,
+		                                                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+		                                            }),
+		                                    });
 		pCommandBuffer->CmdBlitImage(resource.pColorImage, rwArgs.pOutColorImage,
 		                             {
 		                                 .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},

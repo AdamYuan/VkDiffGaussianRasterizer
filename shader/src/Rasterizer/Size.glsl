@@ -27,4 +27,6 @@
 
 #define SORT_COUNT_BUFFER_OFFSET 4
 
+#define I_COLOR0_BINDING 12
+
 #endif

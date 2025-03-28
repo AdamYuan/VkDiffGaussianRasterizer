@@ -30,7 +30,11 @@ int main() {
 		features.vk13.computeFullSubgroups = VK_TRUE;
 		pDevice = myvk::Device::Create(
 		    pPhysicalDevice, myvk::GenericPresentQueueSelector{&pGenericQueue, pSurface, &pPresentQueue}, features,
-		    {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME});
+		    {
+		        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+		        VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
+		        VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME,
+		    });
 	}
 
 	auto pFrameManager =
