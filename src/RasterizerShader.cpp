@@ -41,5 +41,12 @@ myvk::Ptr<myvk::ShaderModule> Rasterizer::createForwardDrawFragShader(const myvk
 	};
 	return myvk::ShaderModule::Create(pDevice, kCode, sizeof(kCode));
 }
+myvk::Ptr<myvk::ShaderModule> Rasterizer::createForwardCopyShader(const myvk::Ptr<myvk::Device> &pDevice) {
+	static constexpr uint32_t kCode[] = {
+#include <shader/Rasterizer/ForwardCopy.comp.inl>
+
+	};
+	return myvk::ShaderModule::Create(pDevice, kCode, sizeof(kCode));
+}
 
 } // namespace VkGSRaster

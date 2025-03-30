@@ -81,7 +81,7 @@ private:
 	DeviceSorter mSorter;
 
 	myvk::Ptr<myvk::PipelineLayout> mpPipelineLayout;
-	myvk::Ptr<myvk::ComputePipeline> mpForwardResetPipeline, mpForwardViewPipeline;
+	myvk::Ptr<myvk::ComputePipeline> mpForwardResetPipeline, mpForwardViewPipeline, mpForwardCopyPipeline;
 	myvk::Ptr<myvk::GraphicsPipeline> mpForwardDrawPipeline;
 	myvk::Ptr<myvk::RenderPass> mpForwardRenderPass;
 
@@ -90,6 +90,7 @@ private:
 	static myvk::Ptr<myvk::ShaderModule> createForwardViewShader(const myvk::Ptr<myvk::Device> &pDevice);
 	static myvk::Ptr<myvk::ShaderModule> createForwardDrawGeomShader(const myvk::Ptr<myvk::Device> &pDevice);
 	static myvk::Ptr<myvk::ShaderModule> createForwardDrawFragShader(const myvk::Ptr<myvk::Device> &pDevice);
+	static myvk::Ptr<myvk::ShaderModule> createForwardCopyShader(const myvk::Ptr<myvk::Device> &pDevice);
 
 public:
 	Rasterizer() = default;

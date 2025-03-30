@@ -68,10 +68,12 @@ int main() {
 		pFramebuffer = myvk::ImagelessFramebuffer::Create(pRenderPass, {pFrameManager->GetSwapchainImageViews()[0]});
 	});
 
-	Rasterizer rasterizer{pDevice, {.forwardOutputImage = true}};
+	bool forwardOutputImage = false;
+	Rasterizer rasterizer{pDevice, {.forwardOutputImage = forwardOutputImage}};
 	Rasterizer::Resource rasterizerResource;
-
 	rasterizerResource.updateImage(pDevice, kWidth, kHeight, rasterizer);
+	auto pColorBuffer = myvk::Buffer::Create(pDevice, sizeof(float) * 3 * kWidth * kHeight, 0,
+	                                         Rasterizer::GetFwdArgsUsage().outColorBuffer);
 
 	VkGSModel vkGsModel{};
 
@@ -89,10 +91,18 @@ int main() {
 				const char *filename =
 				    tinyfd_openFileDialog("Open GS Model", "", kFilterCount, kFilterPatterns, nullptr, false);
 				if (filename) {
+					pGenericQueue->WaitIdle();
 					vkGsModel =
 					    VkGSModel::Create(pGenericQueue, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, GSModel::Load(filename));
 					if (!vkGsModel.IsEmpty())
 						rasterizerResource.updateBuffer(pDevice, vkGsModel.splatCount);
+				}
+			}
+			if (ImGui::Checkbox("Output Image", &forwardOutputImage)) {
+				if (forwardOutputImage != rasterizer.GetConfig().forwardOutputImage) {
+					pGenericQueue->WaitIdle();
+					rasterizer = Rasterizer{pDevice, {.forwardOutputImage = forwardOutputImage}};
+					rasterizerResource.updateImage(pDevice, kWidth, kHeight, rasterizer);
 				}
 			}
 			ImGui::Text("Splat Count: %u", vkGsModel.splatCount);
@@ -117,6 +127,13 @@ int main() {
 			    });
 
 			if (!vkGsModel.IsEmpty()) {
+				if (!forwardOutputImage)
+					pCommandBuffer->CmdPipelineBarrier2(
+					    {},
+					    {pColorBuffer->GetMemoryBarrier2(Rasterizer::GetDstFwdRWArgsSync().outColorBuffer.GetWrite(),
+					                                     Rasterizer::GetSrcFwdRWArgsSync().outColorBuffer)},
+					    {});
+
 				rasterizer.CmdForward(pCommandBuffer,
 				                      {
 				                          .camera =
@@ -140,6 +157,7 @@ int main() {
 				                          .bgColor = {1.0f, 1.0f, 1.0f},
 				                      },
 				                      {
+				                          .pOutColorBuffer = pColorBuffer,
 				                          .pOutColorImage = pSwapchainImage,
 				                      },
 				                      rasterizerResource);

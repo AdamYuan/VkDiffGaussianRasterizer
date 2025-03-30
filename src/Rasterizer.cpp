@@ -35,14 +35,16 @@ void Rasterizer::Resource::updateBuffer(const myvk::Ptr<myvk::Device> &pDevice, 
 }
 void Rasterizer::Resource::updateImage(const myvk::Ptr<myvk::Device> &pDevice, uint32_t width, uint32_t height,
                                        const Rasterizer &rasterizer) {
-	VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT;
+	VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	if (rasterizer.GetConfig().forwardOutputImage)
 		usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+	else
+		usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
 
-	if (ResizeImage<VK_FORMAT_R32G32B32A32_SFLOAT>(pDevice, pColorImage, usage, width, height)) {
+	if (ResizeImage<VK_FORMAT_R32G32B32A32_SFLOAT>(pDevice, pColorImage, usage, width, height))
 		pColorImageView = myvk::ImageView::Create(pColorImage, VK_IMAGE_VIEW_TYPE_2D);
-		pForwardFramebuffer = myvk::Framebuffer::Create(rasterizer.mpForwardRenderPass, {}, {width, height});
-	}
+
+	ResizeFramebuffer(rasterizer.mpForwardRenderPass, {}, pForwardFramebuffer, width, height);
 }
 
 namespace {
@@ -117,6 +119,14 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 	         .descriptorCount = 1u,
 	         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+	        {.binding = TEX_IMAGE0_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+	        {.binding = SBUF_PIXELS_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
 	    },
 	    VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR);
 
@@ -141,6 +151,7 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	// Forward Pipelines
 	mpForwardResetPipeline = myvk::ComputePipeline::Create(mpPipelineLayout, createForwardResetShader(pDevice));
 	mpForwardViewPipeline = myvk::ComputePipeline::Create(mpPipelineLayout, createForwardViewShader(pDevice));
+	mpForwardCopyPipeline = myvk::ComputePipeline::Create(mpPipelineLayout, createForwardCopyShader(pDevice));
 	mpForwardDrawPipeline = myvk::GraphicsPipeline::Create(
 	    mpPipelineLayout, mpForwardRenderPass,
 	    myvk::GraphicsPipelineShaderModules{.vert = pDrawVertShader,
@@ -162,7 +173,7 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 
 void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const FwdROArgs &roArgs,
                             const FwdRWArgs &rwArgs, const Resource &resource) const {
-	std::vector kDescriptorSetWrites = {
+	std::vector descriptorSetWrites = {
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.splats.pMeanBuffer, SBUF_MEANS_BINDING),
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.splats.pScaleBuffer, SBUF_SCALES_BINDING),
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.splats.pRotateBuffer, SBUF_ROTATES_BINDING),
@@ -179,10 +190,13 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	    // myvk::DescriptorSetWrite::WriteUniformBuffer(nullptr, resource.pDrawArgBuffer, SBUF_SORT_COUNT_BINDING),
 	    myvk::DescriptorSetWrite::WriteStorageImage(nullptr, resource.pColorImageView, SIMG_IMAGE0_BINDING),
 	};
-	pCommandBuffer->CmdPushDescriptorSet(mpPipelineLayout, VK_PIPELINE_BIND_POINT_COMPUTE, 0, kDescriptorSetWrites);
-	pCommandBuffer->CmdPushDescriptorSet(mpPipelineLayout, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, kDescriptorSetWrites);
+	if (!mConfig.forwardOutputImage) {
+		descriptorSetWrites.push_back(
+		    myvk::DescriptorSetWrite::WriteSampledImage(nullptr, resource.pColorImageView, TEX_IMAGE0_BINDING));
+		descriptorSetWrites.push_back(
+		    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, rwArgs.pOutColorBuffer, SBUF_PIXELS_BINDING));
+	}
 
-	// Push Constant
 	PushConstantData pcData = {
 	    .bgColor = roArgs.bgColor,
 	    .splatCount = roArgs.splats.count,
@@ -191,6 +205,9 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	    .camPos = roArgs.camera.pos,
 	    .camViewMat = roArgs.camera.viewMat,
 	};
+
+	// Descriptors and Push Constants
+	pCommandBuffer->CmdPushDescriptorSet(mpPipelineLayout, VK_PIPELINE_BIND_POINT_COMPUTE, 0, descriptorSetWrites);
 	pCommandBuffer->CmdPushConstants(
 	    mpPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, //
 	    0, sizeof(PushConstantData), &pcData);
@@ -269,6 +286,14 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	mSorter.CmdSort(pCommandBuffer, {.pCountBuffer = resource.pDrawArgBuffer},
 	                {.pKeyBuffer = resource.pSortKeyBuffer, .pPayloadBuffer = resource.pSortPayloadBuffer},
 	                resource.sorterResource);
+
+	// Rebind again after Sort
+	pCommandBuffer->CmdPushDescriptorSet(mpPipelineLayout, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, descriptorSetWrites);
+	if (!mConfig.forwardOutputImage)
+		pCommandBuffer->CmdPushDescriptorSet(mpPipelineLayout, VK_PIPELINE_BIND_POINT_COMPUTE, 0, descriptorSetWrites);
+	pCommandBuffer->CmdPushConstants(
+	    mpPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, //
+	    0, sizeof(PushConstantData), &pcData);
 
 	// Read-After-Write Barriers for pSortPayloadBuffer, SplatView Buffers, SplatQuad Buffers
 	pCommandBuffer->CmdPipelineBarrier2(
@@ -361,7 +386,23 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 		                             },
 		                             VK_FILTER_NEAREST);
 	} else {
-		// TODO: Copy to rwArgs.pColorBuffer
+		pCommandBuffer->CmdPipelineBarrier2({}, {},
+		                                    {
+		                                        resource.pColorImage->GetMemoryBarrier2(
+		                                            {
+		                                                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+		                                                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+		                                                VK_IMAGE_LAYOUT_GENERAL,
+		                                            },
+		                                            {
+		                                                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+		                                                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+		                                                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		                                            }),
+		                                    });
+		pCommandBuffer->CmdBindPipeline(mpForwardCopyPipeline);
+		pCommandBuffer->CmdDispatch((roArgs.camera.width + FORWARD_COPY_DIM_X - 1) / FORWARD_COPY_DIM_X,
+		                            (roArgs.camera.height + FORWARD_COPY_DIM_Y - 1) / FORWARD_COPY_DIM_Y, 1u);
 	}
 }
 

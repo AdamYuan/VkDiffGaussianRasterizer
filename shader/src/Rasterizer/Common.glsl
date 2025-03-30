@@ -113,4 +113,31 @@ layout(std430, binding = SBUF_QUADS_BINDING) writeonly buffer bQuads { vec4 gQua
 void storeSplatQuad(uint splatIdx, SplatQuad quad) { gQuads[splatIdx] = vec4(quad.axis1, quad.axis2); }
 #endif
 
+#if defined(RASTERIZER_LOAD_PIXEL) || defined(RASTERIZER_STORE_PIXEL)
+uint pixelCoord2Idx(uvec2 pixelCoord) { return pixelCoord.x + gCamResolution.x * pixelCoord.y; }
+uvec2 pixelIdx2Coord(uint pixelIdx) { return uvec2(pixelIdx % gCamResolution.x, pixelIdx / gCamResolution.x); }
+#endif
+
+// Pixel Load
+#ifdef RASTERIZER_LOAD_PIXEL
+layout(std430, binding = SBUF_PIXELS_BINDING) readonly buffer bPixels { float gPixels[]; };
+vec3 loadPixel(uint pixelIdx) {
+	uint pixelCount = gCamResolution.x * gCamResolution.y;
+	return vec3(gPixels[pixelIdx], gPixels[pixelCount + pixelIdx], gPixels[pixelCount * 2 + pixelIdx]);
+}
+vec3 loadPixel(uvec2 pixelCoord) { return loadPixel(pixelCoord2Idx(pixelCoord)); }
+#endif
+
+// Pixel Store
+#ifdef RASTERIZER_STORE_PIXEL
+layout(std430, binding = SBUF_PIXELS_BINDING) writeonly buffer bPixels { float gPixels[]; };
+void storePixel(uint pixelIdx, vec3 color) {
+	uint pixelCount = gCamResolution.x * gCamResolution.y;
+	gPixels[pixelIdx] = color.x;
+	gPixels[pixelCount + pixelIdx] = color.y;
+	gPixels[pixelCount * 2 + pixelIdx] = color.z;
+}
+void storePixel(uvec2 pixelCoord, vec3 color) { storePixel(pixelCoord2Idx(pixelCoord), color); }
+#endif
+
 #endif

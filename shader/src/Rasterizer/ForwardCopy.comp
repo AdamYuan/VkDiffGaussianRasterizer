@@ -1,0 +1,19 @@
+#version 450
+#extension GL_EXT_samplerless_texture_functions : require
+
+#define RASTERIZER_STORE_PIXEL
+#include "Common.glsl"
+
+layout(local_size_x = FORWARD_COPY_DIM_X, local_size_y = FORWARD_COPY_DIM_Y, local_size_z = 1) in;
+
+layout(binding = TEX_IMAGE0_BINDING) uniform texture2D gColors_Ts;
+
+void main() {
+	Camera camera = loadCamera();
+	uvec2 coord = gl_GlobalInvocationID.xy;
+	if (any(greaterThanEqual(coord, camera.resolution)))
+		return;
+
+	vec4 color_T = texelFetch(gColors_Ts, ivec2(coord), 0);
+	storePixel(coord, color_T.xyz);
+}

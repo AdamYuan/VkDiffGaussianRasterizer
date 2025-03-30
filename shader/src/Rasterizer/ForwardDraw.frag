@@ -10,7 +10,7 @@ in bIn {
 }
 gIn;
 
-layout(rgba32f, binding = SIMG_IMAGE0_BINDING) coherent uniform image2D gColorT;
+layout(rgba32f, binding = SIMG_IMAGE0_BINDING) coherent uniform image2D gColors_Ts;
 
 layout(pixel_interlock_ordered) in;
 
@@ -26,9 +26,9 @@ void main() {
 	ivec2 coord = ivec2(gl_FragCoord.xy);
 
 	beginInvocationInterlockARB();
-	vec4 color_T = imageLoad(gColorT, coord);
+	vec4 color_T = imageLoad(gColors_Ts, coord);
 	color_T *= oneMinusAlpha;
 	color_T.xyz += alphaColor;
-	imageStore(gColorT, coord, color_T);
+	imageStore(gColors_Ts, coord, color_T);
 	endInvocationInterlockARB();
 }
