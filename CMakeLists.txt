@@ -62,6 +62,7 @@ target_link_libraries(VkGSRaster_Rasterizer PUBLIC
 
 add_subdirectory(test/dep/json)
 add_subdirectory(test/dep/tinyfiledialogs)
+add_subdirectory(test/dep/diff-gaussian-rasterization)
 
 add_executable(DeviceSorterTest
         test/DeviceSorterTest.cpp

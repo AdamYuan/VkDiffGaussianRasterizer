@@ -5,3 +5,6 @@
 [submodule "test/dep/json"]
 	path = test/dep/json
 	url = git@github.com:nlohmann/json.git
+[submodule "test/dep/diff-gaussian-rasterization"]
+	path = test/dep/diff-gaussian-rasterization
+	url = git@github.com:AdamYuan/diff-gaussian-rasterization.git
