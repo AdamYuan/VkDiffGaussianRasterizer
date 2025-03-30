@@ -11,7 +11,6 @@
 #include <tinyfiledialogs.h>
 
 constexpr uint32_t kFrameCount = 3, kWidth = 1280, kHeight = 720;
-constexpr uint32_t kMaxSortKeyCount = 1000000;
 
 int main() {
 	using VkGSRaster::Rasterizer;
