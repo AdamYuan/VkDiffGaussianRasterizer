@@ -26,8 +26,13 @@ int main() {
 		auto pSurface = myvk::Surface::Create(pInstance, pWindow);
 		auto pPhysicalDevice = myvk::PhysicalDevice::Fetch(pInstance)[0];
 		auto features = pPhysicalDevice->GetDefaultFeatures();
+		VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT fragShaderInterlockFeature{
+		    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT,
+		    .fragmentShaderPixelInterlock = VK_TRUE,
+		};
 		features.vk13.synchronization2 = VK_TRUE;
 		features.vk13.computeFullSubgroups = VK_TRUE;
+		features.SetPNext(&fragShaderInterlockFeature);
 		pDevice = myvk::Device::Create(
 		    pPhysicalDevice, myvk::GenericPresentQueueSelector{&pGenericQueue, pSurface, &pPresentQueue}, features,
 		    {
