@@ -7,6 +7,7 @@
 #define GSMODEL_HPP
 
 #include <cinttypes>
+#include <concepts>
 #include <filesystem>
 #include <myvk/BufferBase.hpp>
 #include <vector>
@@ -34,6 +35,28 @@ struct VkGSModel {
 	myvk::Ptr<myvk::BufferBase> pOpacityBuffer; // P * [float]
 	myvk::Ptr<myvk::BufferBase> pSHBuffer;      // P * [M * float3]
 
+	void CopyFrom(const myvk::Ptr<myvk::Queue> &pQueue, const GSModel &model);
+	static VkGSModel Create(const myvk::Ptr<myvk::Queue> &pQueue, VkBufferUsageFlags bufferUsage, const GSModel &model,
+	                        std::invocable<VkDeviceSize, VkBufferUsageFlags> auto &&createBufferFunc) {
+		if (model.IsEmpty())
+			return {};
+
+		const auto getVectorBytes = []<typename T>(const std::vector<T> &vec) -> VkDeviceSize {
+			return sizeof(T) * vec.size();
+		};
+
+		bufferUsage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+		VkGSModel vkModel{.splatCount = model.splatCount};
+		vkModel.pMeanBuffer = createBufferFunc(getVectorBytes(model.means), bufferUsage);
+		vkModel.pScaleBuffer = createBufferFunc(getVectorBytes(model.scales), bufferUsage);
+		vkModel.pRotateBuffer = createBufferFunc(getVectorBytes(model.rotates), bufferUsage);
+		vkModel.pOpacityBuffer = createBufferFunc(getVectorBytes(model.opacities), bufferUsage);
+		vkModel.pSHBuffer = createBufferFunc(getVectorBytes(model.shs), bufferUsage);
+		vkModel.CopyFrom(pQueue, model);
+
+		return vkModel;
+	}
 	static VkGSModel Create(const myvk::Ptr<myvk::Queue> &pQueue, VkBufferUsageFlags bufferUsage, const GSModel &model);
 	bool IsEmpty() const { return splatCount == 0; }
 };

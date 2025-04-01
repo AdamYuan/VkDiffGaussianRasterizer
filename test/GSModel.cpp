@@ -168,17 +168,14 @@ property float rot_3
 end_header
 #endif
 
-VkGSModel VkGSModel::Create(const myvk::Ptr<myvk::Queue> &pQueue, VkBufferUsageFlags bufferUsage,
-                            const GSModel &model) {
-	if (model.IsEmpty())
-		return {};
+void VkGSModel::CopyFrom(const myvk::Ptr<myvk::Queue> &pQueue, const GSModel &model) {
+	if (model.splatCount != splatCount)
+		return;
 
 	const auto &pDevice = pQueue->GetDevicePtr();
 	auto pCommandPool = myvk::CommandPool::Create(pQueue);
-	const auto makeBuffer = [&pDevice, &pCommandPool, bufferUsage](const auto &data) {
+	const auto copyBuffer = [&pDevice, &pCommandPool](const myvk::Ptr<myvk::BufferBase> &pBuffer, const auto &data) {
 		auto pStagingBuffer = myvk::Buffer::CreateStaging(pDevice, data.begin(), data.end());
-		auto pBuffer =
-		    myvk::Buffer::Create(pDevice, pStagingBuffer->GetSize(), 0, VK_BUFFER_USAGE_TRANSFER_DST_BIT | bufferUsage);
 
 		auto pCommandBuffer = myvk::CommandBuffer::Create(pCommandPool);
 		pCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
@@ -192,12 +189,16 @@ VkGSModel VkGSModel::Create(const myvk::Ptr<myvk::Queue> &pQueue, VkBufferUsageF
 		return pBuffer;
 	};
 
-	VkGSModel vkModel{.splatCount = model.splatCount};
-	vkModel.pMeanBuffer = makeBuffer(model.means);
-	vkModel.pScaleBuffer = makeBuffer(model.scales);
-	vkModel.pRotateBuffer = makeBuffer(model.rotates);
-	vkModel.pOpacityBuffer = makeBuffer(model.opacities);
-	vkModel.pSHBuffer = makeBuffer(model.shs);
+	copyBuffer(pMeanBuffer, model.means);
+	copyBuffer(pScaleBuffer, model.scales);
+	copyBuffer(pRotateBuffer, model.rotates);
+	copyBuffer(pOpacityBuffer, model.opacities);
+	copyBuffer(pSHBuffer, model.shs);
+}
 
-	return vkModel;
+VkGSModel VkGSModel::Create(const myvk::Ptr<myvk::Queue> &pQueue, VkBufferUsageFlags bufferUsage,
+                            const GSModel &model) {
+	return Create(pQueue, bufferUsage, model, [&](VkDeviceSize size, VkBufferUsageFlags usage) {
+		return myvk::Buffer::Create(pQueue->GetDevicePtr(), size, 0, usage);
+	});
 }
