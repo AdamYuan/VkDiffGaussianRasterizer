@@ -37,19 +37,24 @@ struct CuTileRasterizer {
 		const float *projMat{};
 		const float *pos{};
 
-		static Camera Create(const VkGSRaster::Camera &vkCamera);
+		void Update(const VkGSRaster::Camera &vkCamera);
 	};
 
-	struct FwdArgs {
+	struct FwdROArgs {
 		Camera camera;
 		SplatArgs splats;
 		const float *bgColor{};
-		float *outColor{};
 
-		static FwdArgs Create(const VkGSRaster::Rasterizer::FwdROArgs &vkROArgs);
+		void Update(const VkGSRaster::Rasterizer::FwdROArgs &vkROArgs);
 	};
 
-	static void Forward(const FwdArgs &args, Resource &resource);
+	struct FwdRWArgs {
+		float *outColor{};
+
+		void Update(const VkGSRaster::Rasterizer::FwdRWArgs &vkRWArgs);
+	};
+
+	static void Forward(const FwdROArgs &roArgs, const FwdRWArgs &rwArgs, Resource &resource);
 };
 
 #endif
