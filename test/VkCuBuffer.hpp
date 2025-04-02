@@ -17,9 +17,9 @@ private:
 	void *mpCudaMapped{nullptr};
 
 public:
-	myvk::Ptr<VkCuBuffer> Create(const myvk::Ptr<myvk::Device> &pDevice, VkDeviceSize size, VkBufferUsageFlags usage,
-	                             VkMemoryPropertyFlags memoryProperties,
-	                             const std::vector<myvk::Ptr<myvk::Queue>> &pAccessQueues = {});
+	static myvk::Ptr<VkCuBuffer> Create(const myvk::Ptr<myvk::Device> &pDevice, VkDeviceSize size,
+	                                    VkBufferUsageFlags usage, VkMemoryPropertyFlags memoryProperties,
+	                                    const std::vector<myvk::Ptr<myvk::Queue>> &pAccessQueues = {});
 	~VkCuBuffer() override;
 	const myvk::Ptr<myvk::Device> &GetDevicePtr() const override { return mpDevice; }
 
