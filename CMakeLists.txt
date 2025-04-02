@@ -63,6 +63,7 @@ target_link_libraries(VkGSRaster_Rasterizer PUBLIC
 add_subdirectory(test/dep/json)
 add_subdirectory(test/dep/tinyfiledialogs)
 add_subdirectory(test/dep/diff-gaussian-rasterization)
+add_subdirectory(test/dep/stb_image_write)
 
 add_executable(DeviceSorterTest
         test/DeviceSorterTest.cpp
@@ -81,4 +82,24 @@ target_link_libraries(RasterizerTest PRIVATE
         myvk::vulkan myvk::glfw myvk::imgui
         VkGSRaster::Rasterizer
         tinyfiledialogs
+)
+
+enable_language(CUDA)
+add_executable(PerformanceTest
+        test/GSModel.cpp
+        test/GSDataset.cpp
+        test/VkCuBuffer.cu
+        test/VkCuBuffer.hpp
+        test/CuTileRasterizer.cu
+        test/CuTileRasterizer.hpp
+        test/CuImageWrite.cu
+        test/CuImageWrite.hpp
+        test/PerformanceTest.cpp
+)
+target_link_libraries(PerformanceTest PRIVATE
+        myvk::vulkan
+        VkGSRaster::Rasterizer
+        CudaRasterizer
+        nlohmann_json
+        stb_image_write
 )
