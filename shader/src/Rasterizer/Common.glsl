@@ -20,9 +20,9 @@ Camera loadCamera() {
 	cam.focal = gCamFocal;
 	cam.resolution = gCamResolution;
 	cam.pos = gCamPos;
-	cam.viewMat = mat3(gCamViewMat[0], gCamViewMat[1], gCamViewMat[2], //
-	                   gCamViewMat[3], gCamViewMat[4], gCamViewMat[5], //
-	                   gCamViewMat[6], gCamViewMat[7], gCamViewMat[8]);
+	cam.viewMat = mat3(gCamViewMat[0], gCamViewMat[3], gCamViewMat[6], //
+	                   gCamViewMat[1], gCamViewMat[4], gCamViewMat[7], //
+	                   gCamViewMat[2], gCamViewMat[5], gCamViewMat[8]);
 	return cam;
 }
 
@@ -174,8 +174,8 @@ struct VGroupThreadID {
 // User parameter (N). Recommended values: 8, 16 or 32.
 VGroupThreadID ThreadGroupTilingX(uint maxTileWidth) {
 	const uvec2 dispatchGridDim =
-	    gl_NumWorkGroups.xy;                  // Arguments of the Dispatch call (typically from a ConstantBuffer)
-	const uvec2 ctaDim = gl_WorkGroupSize.xy; // Already known in HLSL, eg:[numthreads(8, 8, 1)] -> uint2(8, 8)
+	    gl_NumWorkGroups.xy;          // Arguments of the Dispatch call (typically from a ConstantBuffer)
+	const uvec2 ctaDim = uvec2(8, 8); // Already known in HLSL, eg:[numthreads(8, 8, 1)] -> uint2(8, 8)
 	const uvec2 groupThreadID = gl_LocalInvocationID.xy; // SV_GroupThreadID
 	const uvec2 groupId = gl_WorkGroupID.xy;             // SV_GroupID
 	// A perfect tile is one with dimensions = [maxTileWidth, dispatchGridDim.y]

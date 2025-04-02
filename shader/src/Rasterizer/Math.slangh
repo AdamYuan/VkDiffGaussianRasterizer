@@ -189,8 +189,7 @@ float quadPos2alpha(float2 quadPos, float opacity) {
 [noinline]
 [Differentiable]
 float splatViewGeom2alpha(SplatViewGeom splatViewGeom, no_diff float2 fragCoord, no_diff Camera camera) {
-	float2 pos2D = float2(fragCoord.x, float(camera.resolution.y) - fragCoord.y);
-	float2 x2D = pos2D - splatViewGeom.mean2D;
+	float2 x2D = fragCoord - splatViewGeom.mean2D;
 
 	float power = -0.5 * (splatViewGeom.conic.x * x2D.x * x2D.x + splatViewGeom.conic.z * x2D.y * x2D.y) //
 	              - splatViewGeom.conic.y * x2D.x * x2D.y;
@@ -230,14 +229,12 @@ float opacity2quadBound(float opacity) {
 
 [noinline]
 float2 pos2D2clip(float2 pos, Camera camera) {
-	pos.y = -pos.y;
 	pos = pos * (2.0 / float2(camera.resolution));
 	return pos;
 }
 
 [noinline]
 float2 axis2D2clip(float2 axis, Camera camera) {
-	axis.y = -axis.y;
 	axis = axis * (2.0 / float2(camera.resolution));
 	return axis;
 }

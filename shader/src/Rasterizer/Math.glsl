@@ -911,7 +911,7 @@ void _d_exp_0(inout DiffPair_float_0 dpx_7, float dOut_7) {
 	return;
 }
 float splatViewGeom2alpha(SplatViewGeom splatViewGeom_0, vec2 fragCoord_0, Camera camera_3) {
-	vec2 x2D_0 = vec2(fragCoord_0.x, float(camera_3.resolution.y) - fragCoord_0.y) - splatViewGeom_0.mean2D;
+	vec2 x2D_0 = fragCoord_0 - splatViewGeom_0.mean2D;
 	float _S332 = x2D_0.x;
 	float _S333 = x2D_0.y;
 	return splatViewGeom_0.opacity *
@@ -936,7 +936,7 @@ void s_bwd_prop_exp_0(inout DiffPair_float_0 _S335, float _S336) {
 }
 void s_bwd_prop_splatViewGeom2alpha_0(inout DiffPair_SplatViewGeom_0 dpsplatViewGeom_0, vec2 fragCoord_1,
                                       Camera camera_4, float _s_dOut_7) {
-	vec2 x2D_1 = vec2(fragCoord_1.x, float(camera_4.resolution.y) - fragCoord_1.y) - dpsplatViewGeom_0.primal_0.mean2D;
+	vec2 x2D_1 = fragCoord_1 - dpsplatViewGeom_0.primal_0.mean2D;
 	float _S337 = dpsplatViewGeom_0.primal_0.conic.x;
 	float _S338 = x2D_1.x;
 	float _S339 = _S337 * _S338;
@@ -999,19 +999,7 @@ bool inFrustum(SplatViewGeom splatViewGeom_2, SplatQuad splatQuad_0, Camera came
 	return true;
 }
 float opacity2quadBound(float opacity) { return sqrt(2.0 * (5.54126358032226562 + log(opacity))); }
-vec2 pos2D2clip(vec2 pos, Camera camera_8) {
-	vec2 _S363 = pos;
-	_S363[1] = -pos.y;
-	vec2 _S364 = _S363 * (2.0 / vec2(camera_8.resolution));
-	_S363 = _S364;
-	return _S364;
-}
-vec2 axis2D2clip(vec2 axis_0, Camera camera_9) {
-	vec2 _S365 = axis_0;
-	_S365[1] = -axis_0.y;
-	vec2 _S366 = _S365 * (2.0 / vec2(camera_9.resolution));
-	_S365 = _S366;
-	return _S366;
-}
+vec2 pos2D2clip(vec2 pos, Camera camera_8) { return pos * (2.0 / vec2(camera_8.resolution)); }
+vec2 axis2D2clip(vec2 axis_0, Camera camera_9) { return axis_0 * (2.0 / vec2(camera_9.resolution)); }
 float quadPos2alpha(vec2 quadPos_0, float opacity) { return opacity * exp(-0.5 * dot(quadPos_0, quadPos_0)); }
 #endif
