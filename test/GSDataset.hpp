@@ -19,6 +19,7 @@ struct GSDataset {
 	std::vector<Entry> entries;
 
 	static GSDataset Load(const std::filesystem::path &filename);
+	bool IsEmpty() const { return entries.empty(); }
 };
 
 #endif
