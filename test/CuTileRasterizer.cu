@@ -27,11 +27,11 @@ char *CuTileRasterizer::Resource::ResizeableBuffer::Update(std::size_t updateSiz
 	return data;
 }
 
-void CuTileRasterizer::Camera::Update(const vkgsraster::Camera &vkCamera) {
+void CuTileRasterizer::CameraArgs::Update(const vkgsraster::Rasterizer::CameraArgs &vkCamera) {
 	width = (int)vkCamera.width;
 	height = (int)vkCamera.height;
-	tanFovX = vkgsraster::Camera::GetTanFovFromFocal(vkCamera.focalX, vkCamera.width);
-	tanFovY = vkgsraster::Camera::GetTanFovFromFocal(vkCamera.focalY, vkCamera.height);
+	tanFovX = vkgsraster::Rasterizer::CameraArgs::GetTanFovFromFocal(vkCamera.focalX, vkCamera.width);
+	tanFovY = vkgsraster::Rasterizer::CameraArgs::GetTanFovFromFocal(vkCamera.focalY, vkCamera.height);
 
 	using Mat4 = std::array<float, 16>;
 	using Mat3 = std::array<float, 9>;
@@ -107,9 +107,9 @@ void CuTileRasterizer::Camera::Update(const vkgsraster::Camera &vkCamera) {
 
 void CuTileRasterizer::FwdROArgs::Update(const vkgsraster::Rasterizer::FwdROArgs &vkROArgs) {
 	camera.Update(vkROArgs.camera);
+	splatCount = vkROArgs.splatCount;
 
 	splats = {
-	    .count = vkROArgs.splats.count,
 	    .means = std::static_pointer_cast<VkCuBuffer>(vkROArgs.splats.pMeanBuffer)->GetCudaMappedPtr<float>(),
 	    .scales = std::static_pointer_cast<VkCuBuffer>(vkROArgs.splats.pScaleBuffer)->GetCudaMappedPtr<float>(),
 	    .rotates = std::static_pointer_cast<VkCuBuffer>(vkROArgs.splats.pRotateBuffer)->GetCudaMappedPtr<float>(),
@@ -137,11 +137,11 @@ void CuTileRasterizer::Forward(const FwdROArgs &roArgs, const FwdRWArgs &rwArgs,
 	CudaRasterizer::Rasterizer::forward(
 	    [&](std::size_t size) { return resource.geometryBuffer.Update(size); },
 	    [&](std::size_t size) { return resource.binningBuffer.Update(size); },
-	    [&](std::size_t size) { return resource.imageBuffer.Update(size); }, (int)roArgs.splats.count,
-	    GSModel::kSHDegree, GSModel::kSHSize, roArgs.bgColor, roArgs.camera.width, roArgs.camera.height,
-	    roArgs.splats.means, roArgs.splats.shs, nullptr, roArgs.splats.opacities, roArgs.splats.scales, 1.0f,
-	    roArgs.splats.rotates, nullptr, roArgs.camera.viewMat, roArgs.camera.projMat, roArgs.camera.pos,
-	    roArgs.camera.tanFovX, roArgs.camera.tanFovY, false, rwArgs.outColor);
+	    [&](std::size_t size) { return resource.imageBuffer.Update(size); }, (int)roArgs.splatCount, GSModel::kSHDegree,
+	    GSModel::kSHSize, roArgs.bgColor, roArgs.camera.width, roArgs.camera.height, roArgs.splats.means,
+	    roArgs.splats.shs, nullptr, roArgs.splats.opacities, roArgs.splats.scales, 1.0f, roArgs.splats.rotates, nullptr,
+	    roArgs.camera.viewMat, roArgs.camera.projMat, roArgs.camera.pos, roArgs.camera.tanFovX, roArgs.camera.tanFovY,
+	    false, rwArgs.outColor);
 	cudaDeviceSynchronize();
 	// End
 }

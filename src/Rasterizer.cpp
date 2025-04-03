@@ -199,7 +199,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 
 	PushConstantData pcData = {
 	    .bgColor = roArgs.bgColor,
-	    .splatCount = roArgs.splats.count,
+	    .splatCount = roArgs.splatCount,
 	    .camFocal = {roArgs.camera.focalX, roArgs.camera.focalY},
 	    .camResolution = {roArgs.camera.width, roArgs.camera.height},
 	    .camPos = roArgs.camera.pos,
@@ -258,7 +258,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	    },
 	    {});
 	pCommandBuffer->CmdBindPipeline(mpForwardViewPipeline);
-	pCommandBuffer->CmdDispatch((roArgs.splats.count + FORWARD_VIEW_DIM - 1) / FORWARD_VIEW_DIM, 1, 1);
+	pCommandBuffer->CmdDispatch((roArgs.splatCount + FORWARD_VIEW_DIM - 1) / FORWARD_VIEW_DIM, 1, 1);
 
 	// Prepare for Sort (+ Read-After-Write Barrier for pDrawArgBuffer)
 	pCommandBuffer->CmdPipelineBarrier2( //

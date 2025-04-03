@@ -6,14 +6,15 @@
 #ifndef GSDATASET_HPP
 #define GSDATASET_HPP
 
-#include "../src/Camera.hpp"
+#include "../src/Rasterizer.hpp"
+
 #include <filesystem>
 #include <string>
 #include <vector>
 
 struct GSDataset {
 	struct Entry {
-		vkgsraster::Camera camera;
+		vkgsraster::Rasterizer::CameraArgs camera;
 		std::string imageName;
 	};
 	std::vector<Entry> entries;

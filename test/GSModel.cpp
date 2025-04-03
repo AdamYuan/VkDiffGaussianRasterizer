@@ -202,3 +202,13 @@ VkGSModel VkGSModel::Create(const myvk::Ptr<myvk::Queue> &pQueue, VkBufferUsageF
 		return myvk::Buffer::Create(pQueue->GetDevicePtr(), size, 0, usage);
 	});
 }
+
+vkgsraster::Rasterizer::SplatArgs VkGSModel::GetSplatArgs() const {
+	return {
+	    .pMeanBuffer = pMeanBuffer,
+	    .pScaleBuffer = pScaleBuffer,
+	    .pRotateBuffer = pRotateBuffer,
+	    .pOpacityBuffer = pOpacityBuffer,
+	    .pSHBuffer = pSHBuffer,
+	};
+}

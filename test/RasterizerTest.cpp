@@ -149,15 +149,8 @@ int main() {
 				                                  .viewMat = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f},
 				                                  .pos = {0.0f, 0.0f, 0.0f},
 				                              },
-				                          .splats =
-				                              {
-				                                  .count = vkGsModel.splatCount,
-				                                  .pMeanBuffer = vkGsModel.pMeanBuffer,
-				                                  .pScaleBuffer = vkGsModel.pScaleBuffer,
-				                                  .pRotateBuffer = vkGsModel.pRotateBuffer,
-				                                  .pOpacityBuffer = vkGsModel.pOpacityBuffer,
-				                                  .pSHBuffer = vkGsModel.pSHBuffer,
-				                              },
+				                          .splatCount = vkGsModel.splatCount,
+				                          .splats = vkGsModel.GetSplatArgs(),
 				                          .bgColor = {1.0f, 1.0f, 1.0f},
 				                      },
 				                      {

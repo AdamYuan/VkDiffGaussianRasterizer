@@ -10,7 +10,6 @@
 #include <myvk/GraphicsPipeline.hpp>
 #include <myvk/ImageBase.hpp>
 
-#include "Camera.hpp"
 #include "DeviceSorter.hpp"
 
 namespace vkgsraster {
@@ -19,10 +18,21 @@ class Rasterizer {
 public:
 	struct Config {
 		bool forwardOutputImage = false;
+		bool performanceMetrics = false;
+	};
+
+	struct CameraArgs {
+		uint32_t width, height;
+		float focalX, focalY;
+		std::array<float, 3 * 3> viewMat;
+		std::array<float, 3> pos;
+
+		static float GetFocalFromTanFov(float tanFov, uint32_t dim) { return float(dim) * 0.5f / tanFov; }
+		static float GetTanFovFromFocal(float focal, uint32_t dim) { return float(dim) * 0.5f / focal; }
+		// actually, tanFov = tan(fov / 2)
 	};
 
 	struct SplatArgs {
-		uint32_t count{};
 		myvk::Ptr<myvk::BufferBase> pMeanBuffer;    // P * [float3]
 		myvk::Ptr<myvk::BufferBase> pScaleBuffer;   // P * [float3]
 		myvk::Ptr<myvk::BufferBase> pRotateBuffer;  // P * [float4]
@@ -30,8 +40,13 @@ public:
 		myvk::Ptr<myvk::BufferBase> pSHBuffer;      // P * [M * float3]
 	};
 
+	struct Metrics {
+		double forward, forwardView, forwardDraw, forwardSort;
+	};
+
 	struct FwdROArgs {
-		Camera camera{};
+		CameraArgs camera{};
+		uint32_t splatCount{};
 		SplatArgs splats{};
 		std::array<float, 3> bgColor{};
 	};

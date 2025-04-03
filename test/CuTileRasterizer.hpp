@@ -6,7 +6,6 @@
 #ifndef CUTILERASTERIZER_HPP
 #define CUTILERASTERIZER_HPP
 
-#include "../src/Camera.hpp"
 #include "../src/Rasterizer.hpp"
 #include <array>
 
@@ -22,7 +21,6 @@ struct CuTileRasterizer {
 	};
 
 	struct SplatArgs {
-		uint32_t count{};
 		const float *means{};
 		const float *scales{};
 		const float *rotates{};
@@ -30,18 +28,19 @@ struct CuTileRasterizer {
 		const float *shs{};
 	};
 
-	struct Camera {
+	struct CameraArgs {
 		int width{}, height{};
 		float tanFovX{}, tanFovY{};
 		const float *viewMat{};
 		const float *projMat{};
 		const float *pos{};
 
-		void Update(const vkgsraster::Camera &vkCamera);
+		void Update(const vkgsraster::Rasterizer::CameraArgs &vkCamera);
 	};
 
 	struct FwdROArgs {
-		Camera camera;
+		CameraArgs camera;
+		uint32_t splatCount{};
 		SplatArgs splats;
 		const float *bgColor{};
 

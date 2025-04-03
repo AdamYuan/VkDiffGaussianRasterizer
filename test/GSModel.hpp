@@ -12,6 +12,8 @@
 #include <myvk/BufferBase.hpp>
 #include <vector>
 
+#include "../src/Rasterizer.hpp"
+
 struct GSModel {
 	static constexpr uint32_t kSHDegree = 3;
 	static constexpr uint32_t kSHSize = (kSHDegree + 1) * (kSHDegree + 1);
@@ -59,6 +61,7 @@ struct VkGSModel {
 	}
 	static VkGSModel Create(const myvk::Ptr<myvk::Queue> &pQueue, VkBufferUsageFlags bufferUsage, const GSModel &model);
 	bool IsEmpty() const { return splatCount == 0; }
+	vkgsraster::Rasterizer::SplatArgs GetSplatArgs() const;
 };
 
 #endif // GSMODEL_HPP

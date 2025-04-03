@@ -61,15 +61,8 @@ int main(int argc, char **argv) {
 	vkgsraster::Rasterizer::Resource vkRasterResource = {};
 	vkRasterResource.UpdateBuffer(pDevice, vkGsModel.splatCount);
 	vkgsraster::Rasterizer::FwdROArgs vkRasterFwdROArgs = {
-	    .splats =
-	        {
-	            .count = vkGsModel.splatCount,
-	            .pMeanBuffer = vkGsModel.pMeanBuffer,
-	            .pScaleBuffer = vkGsModel.pScaleBuffer,
-	            .pRotateBuffer = vkGsModel.pRotateBuffer,
-	            .pOpacityBuffer = vkGsModel.pOpacityBuffer,
-	            .pSHBuffer = vkGsModel.pSHBuffer,
-	        },
+	    .splatCount = vkGsModel.splatCount,
+	    .splats = vkGsModel.GetSplatArgs(),
 	    .bgColor = {1.0f, 1.0f, 1.0f},
 	};
 	vkgsraster::Rasterizer::FwdRWArgs vkRasterFwdRWArgs;
