@@ -20,6 +20,19 @@ struct CuTileRasterizer {
 		ResizeableBuffer geometryBuffer{}, binningBuffer{}, imageBuffer{};
 	};
 
+	struct PerfMetrics {
+		float forward;
+	};
+
+	struct PerfQuery {
+		enum Event : uint32_t { kForwardStart, kForwardEnd, kEventCount };
+		std::array<uintptr_t, kEventCount> events;
+
+		static PerfQuery Create();
+		void Record(Event event) const;
+		PerfMetrics GetMetrics() const;
+	};
+
 	struct SplatArgs {
 		const float *means{};
 		const float *scales{};
@@ -53,7 +66,8 @@ struct CuTileRasterizer {
 		void Update(const vkgsraster::Rasterizer::FwdRWArgs &vkRWArgs);
 	};
 
-	static void Forward(const FwdROArgs &roArgs, const FwdRWArgs &rwArgs, Resource &resource);
+	static void Forward(const FwdROArgs &roArgs, const FwdRWArgs &rwArgs, Resource &resource,
+	                    const PerfQuery &perfQuery = PerfQuery{});
 };
 
 #endif

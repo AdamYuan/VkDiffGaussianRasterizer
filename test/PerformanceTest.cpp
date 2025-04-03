@@ -60,6 +60,7 @@ int main(int argc, char **argv) {
 	vkgsraster::Rasterizer vkRasterizer{pDevice, {.forwardOutputImage = false}};
 	vkgsraster::Rasterizer::Resource vkRasterResource = {};
 	vkRasterResource.UpdateBuffer(pDevice, vkGsModel.splatCount);
+	vkgsraster::Rasterizer::PerfQuery vkRasterPerfQuery = vkgsraster::Rasterizer::PerfQuery::Create(pDevice);
 	vkgsraster::Rasterizer::FwdROArgs vkRasterFwdROArgs = {
 	    .splatCount = vkGsModel.splatCount,
 	    .splats = vkGsModel.GetSplatArgs(),
@@ -70,6 +71,7 @@ int main(int argc, char **argv) {
 	CuTileRasterizer::Resource cuTileRasterResource{};
 	CuTileRasterizer::FwdROArgs cuTileRasterFwdROArgs{};
 	CuTileRasterizer::FwdRWArgs cuTileRasterFwdRWArgs{};
+	CuTileRasterizer::PerfQuery cuTileRasterPerfQuery = CuTileRasterizer::PerfQuery::Create();
 
 	for (const auto &entry : gsDataset.entries) {
 		vkRasterResource.UpdateImage(pDevice, entry.camera.width, entry.camera.height, vkRasterizer);
@@ -86,16 +88,24 @@ int main(int argc, char **argv) {
 		float *cuOutColors = cuTileRasterFwdRWArgs.outColor;
 
 		pCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-		vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource);
+		vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource,
+		                        vkRasterPerfQuery);
 		pCommandBuffer->End();
 		pCommandBuffer->Submit(pFence);
 		pFence->Wait();
 		pCommandPool->Reset();
 		pFence->Reset();
 
+		auto vkRasterPerfMetrics = vkRasterPerfQuery.GetMetrics();
+		printf("vk_forward: %lf ms\n", vkRasterPerfMetrics.forward);
 		CuImageWrite::Write(entry.imageName + "_vk.png", cuOutColors, entry.camera.width, entry.camera.height);
 
 		CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource);
+		CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource,
+		                          cuTileRasterPerfQuery);
+
+		auto cuTileRasterPerfMetrics = cuTileRasterPerfQuery.GetMetrics();
+		printf("cu_forward: %lf ms\n", cuTileRasterPerfMetrics.forward);
 		CuImageWrite::Write(entry.imageName + "_cu.png", cuOutColors, entry.camera.width, entry.camera.height);
 
 		break; // Only once entry

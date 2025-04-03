@@ -27,6 +27,28 @@ char *CuTileRasterizer::Resource::ResizeableBuffer::Update(std::size_t updateSiz
 	return data;
 }
 
+CuTileRasterizer::PerfQuery CuTileRasterizer::PerfQuery::Create() {
+	PerfQuery query;
+	for (uint32_t i = 0; i < kEventCount; ++i) {
+		cudaEvent_t event;
+		cudaEventCreate(&event);
+		query.events[i] = (uintptr_t)event;
+	}
+	return query;
+}
+void CuTileRasterizer::PerfQuery::Record(Event event) const {
+	if (events[event])
+		cudaEventRecord((cudaEvent_t)events[event]);
+}
+CuTileRasterizer::PerfMetrics CuTileRasterizer::PerfQuery::GetMetrics() const {
+	cudaEventSynchronize((cudaEvent_t)events[kEventCount - 1]);
+
+	PerfMetrics metrics{};
+	cudaEventElapsedTime(&metrics.forward, (cudaEvent_t)events[kForwardStart], (cudaEvent_t)events[kForwardEnd]);
+
+	return metrics;
+}
+
 void CuTileRasterizer::CameraArgs::Update(const vkgsraster::Rasterizer::CameraArgs &vkCamera) {
 	width = (int)vkCamera.width;
 	height = (int)vkCamera.height;
@@ -130,10 +152,11 @@ void CuTileRasterizer::FwdRWArgs::Update(const vkgsraster::Rasterizer::FwdRWArgs
 	outColor = std::static_pointer_cast<VkCuBuffer>(vkRWArgs.pOutColorBuffer)->GetCudaMappedPtr<float>();
 }
 
-void CuTileRasterizer::Forward(const FwdROArgs &roArgs, const FwdRWArgs &rwArgs, Resource &resource) {
-	cudaDeviceSynchronize();
+void CuTileRasterizer::Forward(const FwdROArgs &roArgs, const FwdRWArgs &rwArgs, Resource &resource,
+                               const PerfQuery &perfQuery) {
 
-	// Begin
+	perfQuery.Record(PerfQuery::Event::kForwardStart);
+
 	CudaRasterizer::Rasterizer::forward(
 	    [&](std::size_t size) { return resource.geometryBuffer.Update(size); },
 	    [&](std::size_t size) { return resource.binningBuffer.Update(size); },
@@ -142,6 +165,6 @@ void CuTileRasterizer::Forward(const FwdROArgs &roArgs, const FwdRWArgs &rwArgs,
 	    roArgs.splats.shs, nullptr, roArgs.splats.opacities, roArgs.splats.scales, 1.0f, roArgs.splats.rotates, nullptr,
 	    roArgs.camera.viewMat, roArgs.camera.projMat, roArgs.camera.pos, roArgs.camera.tanFovX, roArgs.camera.tanFovY,
 	    false, rwArgs.outColor);
-	cudaDeviceSynchronize();
-	// End
+
+	perfQuery.Record(PerfQuery::Event::kForwardEnd);
 }
