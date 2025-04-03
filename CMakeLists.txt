@@ -35,26 +35,26 @@ add_subdirectory(dep/MyVK)
 
 add_subdirectory(shader)
 
-add_library(VkGSRaster_DeviceSorter STATIC
+add_library(vkgsraster_DeviceSorter STATIC
         src/DeviceSorter.hpp
         src/DeviceSorter.cpp
         src/DeviceSorterShader.cpp
 )
-add_library(VkGSRaster::DeviceSorter ALIAS VkGSRaster_DeviceSorter)
-target_link_libraries(VkGSRaster_DeviceSorter PUBLIC
+add_library(vkgsraster::DeviceSorter ALIAS vkgsraster_DeviceSorter)
+target_link_libraries(vkgsraster_DeviceSorter PUBLIC
         myvk::vulkan
         shader::DeviceSorter
 )
 
-add_library(VkGSRaster_Rasterizer STATIC
+add_library(vkgsraster_Rasterizer STATIC
         src/Rasterizer.hpp
         src/Rasterizer.cpp
         src/RasterizerShader.cpp
 )
-add_library(VkGSRaster::Rasterizer ALIAS VkGSRaster_Rasterizer)
-target_link_libraries(VkGSRaster_Rasterizer PUBLIC
+add_library(vkgsraster::Rasterizer ALIAS vkgsraster_Rasterizer)
+target_link_libraries(vkgsraster_Rasterizer PUBLIC
         myvk::vulkan
-        VkGSRaster::DeviceSorter
+        vkgsraster::DeviceSorter
         shader::Rasterizer
 )
 
@@ -70,7 +70,7 @@ add_executable(DeviceSorterTest
 )
 target_link_libraries(DeviceSorterTest PRIVATE
         myvk::vulkan myvk::glfw myvk::imgui
-        VkGSRaster::DeviceSorter
+        vkgsraster::DeviceSorter
         shader::DeviceSorterTest
 )
 
@@ -80,7 +80,7 @@ add_executable(RasterizerTest
 )
 target_link_libraries(RasterizerTest PRIVATE
         myvk::vulkan myvk::glfw myvk::imgui
-        VkGSRaster::Rasterizer
+        vkgsraster::Rasterizer
         tinyfiledialogs
 )
 
@@ -98,7 +98,7 @@ add_executable(PerformanceTest
 )
 target_link_libraries(PerformanceTest PRIVATE
         myvk::vulkan
-        VkGSRaster::Rasterizer
+        vkgsraster::Rasterizer
         CudaRasterizer
         nlohmann_json
         stb_image_write

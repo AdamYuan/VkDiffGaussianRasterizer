@@ -4,7 +4,7 @@
 
 #include "Rasterizer.hpp"
 
-namespace VkGSRaster {
+namespace vkgsraster {
 
 myvk::Ptr<myvk::ShaderModule> Rasterizer::createDrawVertShader(const myvk::Ptr<myvk::Device> &pDevice) {
 	static constexpr uint32_t kCode[] = {
@@ -49,4 +49,4 @@ myvk::Ptr<myvk::ShaderModule> Rasterizer::createForwardCopyShader(const myvk::Pt
 	return myvk::ShaderModule::Create(pDevice, kCode, sizeof(kCode));
 }
 
-} // namespace VkGSRaster
+} // namespace vkgsraster

@@ -9,7 +9,7 @@
 #include <myvk/Buffer.hpp>
 #include <myvk/Image.hpp>
 
-namespace VkGSRaster {
+namespace vkgsraster {
 
 template <VkDeviceSize ElementSize_V>
 inline bool GrowBuffer(const myvk::Ptr<myvk::Device> &pDevice, myvk::Ptr<myvk::BufferBase> &pBuffer,
@@ -56,6 +56,6 @@ inline bool ResizeFramebuffer(const myvk::Ptr<myvk::RenderPass> &pRenderPass,
 	return false;
 }
 
-} // namespace VkGSRaster
+} // namespace vkgsraster
 
 #endif

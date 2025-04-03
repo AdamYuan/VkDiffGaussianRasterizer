@@ -17,7 +17,7 @@
 		} \
 	}
 
-char *CuTileRasterizer::Resource::ResizeableBuffer::update(std::size_t updateSize) {
+char *CuTileRasterizer::Resource::ResizeableBuffer::Update(std::size_t updateSize) {
 	if (updateSize > size) {
 		if (data)
 			cudaFree(data);
@@ -27,11 +27,11 @@ char *CuTileRasterizer::Resource::ResizeableBuffer::update(std::size_t updateSiz
 	return data;
 }
 
-void CuTileRasterizer::Camera::Update(const VkGSRaster::Camera &vkCamera) {
+void CuTileRasterizer::Camera::Update(const vkgsraster::Camera &vkCamera) {
 	width = (int)vkCamera.width;
 	height = (int)vkCamera.height;
-	tanFovX = VkGSRaster::Camera::GetTanFovFromFocal(vkCamera.focalX, vkCamera.width);
-	tanFovY = VkGSRaster::Camera::GetTanFovFromFocal(vkCamera.focalY, vkCamera.height);
+	tanFovX = vkgsraster::Camera::GetTanFovFromFocal(vkCamera.focalX, vkCamera.width);
+	tanFovY = vkgsraster::Camera::GetTanFovFromFocal(vkCamera.focalY, vkCamera.height);
 
 	using Mat4 = std::array<float, 16>;
 	using Mat3 = std::array<float, 9>;
@@ -105,7 +105,7 @@ void CuTileRasterizer::Camera::Update(const VkGSRaster::Camera &vkCamera) {
 	cudaCheckError();
 }
 
-void CuTileRasterizer::FwdROArgs::Update(const VkGSRaster::Rasterizer::FwdROArgs &vkROArgs) {
+void CuTileRasterizer::FwdROArgs::Update(const vkgsraster::Rasterizer::FwdROArgs &vkROArgs) {
 	camera.Update(vkROArgs.camera);
 
 	splats = {
@@ -126,7 +126,7 @@ void CuTileRasterizer::FwdROArgs::Update(const VkGSRaster::Rasterizer::FwdROArgs
 	cudaCheckError();
 }
 
-void CuTileRasterizer::FwdRWArgs::Update(const VkGSRaster::Rasterizer::FwdRWArgs &vkRWArgs) {
+void CuTileRasterizer::FwdRWArgs::Update(const vkgsraster::Rasterizer::FwdRWArgs &vkRWArgs) {
 	outColor = std::static_pointer_cast<VkCuBuffer>(vkRWArgs.pOutColorBuffer)->GetCudaMappedPtr<float>();
 }
 
@@ -135,9 +135,9 @@ void CuTileRasterizer::Forward(const FwdROArgs &roArgs, const FwdRWArgs &rwArgs,
 
 	// Begin
 	CudaRasterizer::Rasterizer::forward(
-	    [&](std::size_t size) { return resource.geometryBuffer.update(size); },
-	    [&](std::size_t size) { return resource.binningBuffer.update(size); },
-	    [&](std::size_t size) { return resource.imageBuffer.update(size); }, (int)roArgs.splats.count,
+	    [&](std::size_t size) { return resource.geometryBuffer.Update(size); },
+	    [&](std::size_t size) { return resource.binningBuffer.Update(size); },
+	    [&](std::size_t size) { return resource.imageBuffer.Update(size); }, (int)roArgs.splats.count,
 	    GSModel::kSHDegree, GSModel::kSHSize, roArgs.bgColor, roArgs.camera.width, roArgs.camera.height,
 	    roArgs.splats.means, roArgs.splats.shs, nullptr, roArgs.splats.opacities, roArgs.splats.scales, 1.0f,
 	    roArgs.splats.rotates, nullptr, roArgs.camera.viewMat, roArgs.camera.projMat, roArgs.camera.pos,

@@ -11,9 +11,9 @@
 #include <myvk/DescriptorSetLayout.hpp>
 #include <shader/DeviceSorter/Size.hpp>
 
-namespace VkGSRaster {
+namespace vkgsraster {
 
-void DeviceSorter::Resource::update(const myvk::Ptr<myvk::Device> &pDevice, uint32_t count, double growFactor) {
+void DeviceSorter::Resource::Update(const myvk::Ptr<myvk::Device> &pDevice, uint32_t count, double growFactor) {
 	GrowBuffer<sizeof(uint32_t)>(pDevice, pTempKeyBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, count, growFactor);
 	GrowBuffer<sizeof(uint32_t)>(pDevice, pTempPayloadBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, count, growFactor);
 	GrowBuffer<sizeof(uint32_t)>(pDevice, pPassHistBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
@@ -289,4 +289,4 @@ void DeviceSorter::CmdSort(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer,
 	}
 }
 
-} // namespace VkGSRaster
+} // namespace vkgsraster

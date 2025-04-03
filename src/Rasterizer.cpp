@@ -9,11 +9,11 @@
 
 #include "ResourceUtil.hpp"
 
-namespace VkGSRaster {
+namespace vkgsraster {
 
-void Rasterizer::Resource::updateBuffer(const myvk::Ptr<myvk::Device> &pDevice, uint32_t splatCount,
+void Rasterizer::Resource::UpdateBuffer(const myvk::Ptr<myvk::Device> &pDevice, uint32_t splatCount,
                                         double growFactor) {
-	sorterResource.update(pDevice, splatCount, growFactor);
+	sorterResource.Update(pDevice, splatCount, growFactor);
 
 	GrowBuffer<sizeof(uint32_t)>(pDevice, pSortKeyBuffer,
 	                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | DeviceSorter::GetArgsUsage().keyBuffer,
@@ -33,7 +33,7 @@ void Rasterizer::Resource::updateBuffer(const myvk::Ptr<myvk::Device> &pDevice, 
 	                                              DeviceSorter::GetArgsUsage().countBuffer,
 	                                          1);
 }
-void Rasterizer::Resource::updateImage(const myvk::Ptr<myvk::Device> &pDevice, uint32_t width, uint32_t height,
+void Rasterizer::Resource::UpdateImage(const myvk::Ptr<myvk::Device> &pDevice, uint32_t width, uint32_t height,
                                        const Rasterizer &rasterizer) {
 	VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	if (rasterizer.GetConfig().forwardOutputImage)
@@ -442,7 +442,7 @@ const Rasterizer::FwdArgsUsage &Rasterizer::GetFwdArgsUsage() {
 	return kUsage;
 }
 
-} // namespace VkGSRaster
+} // namespace vkgsraster
 
 // Check DeviceSorter KeyCountBufferOffset
 #include <shader/DeviceSorter/Size.hpp>

@@ -16,7 +16,7 @@ struct CuTileRasterizer {
 			std::size_t size{};
 			char *data{};
 
-			char *update(std::size_t updateSize);
+			char *Update(std::size_t updateSize);
 		};
 		ResizeableBuffer geometryBuffer{}, binningBuffer{}, imageBuffer{};
 	};
@@ -37,7 +37,7 @@ struct CuTileRasterizer {
 		const float *projMat{};
 		const float *pos{};
 
-		void Update(const VkGSRaster::Camera &vkCamera);
+		void Update(const vkgsraster::Camera &vkCamera);
 	};
 
 	struct FwdROArgs {
@@ -45,13 +45,13 @@ struct CuTileRasterizer {
 		SplatArgs splats;
 		const float *bgColor{};
 
-		void Update(const VkGSRaster::Rasterizer::FwdROArgs &vkROArgs);
+		void Update(const vkgsraster::Rasterizer::FwdROArgs &vkROArgs);
 	};
 
 	struct FwdRWArgs {
 		float *outColor{};
 
-		void Update(const VkGSRaster::Rasterizer::FwdRWArgs &vkRWArgs);
+		void Update(const vkgsraster::Rasterizer::FwdRWArgs &vkRWArgs);
 	};
 
 	static void Forward(const FwdROArgs &roArgs, const FwdRWArgs &rwArgs, Resource &resource);

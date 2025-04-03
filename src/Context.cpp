@@ -4,7 +4,7 @@
 
 #include "Context.hpp"
 
-namespace VkGSRaster {
+namespace vkgsraster {
 
 namespace {
 const auto createDeviceQueue =
@@ -41,4 +41,4 @@ Context::Context(uint32_t physicalDeviceID) {
 	    });
 }
 
-} // namespace VkGSRaster
+} // namespace vkgsraster

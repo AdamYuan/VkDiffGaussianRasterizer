@@ -61,11 +61,11 @@ int main() {
 		pFramebuffer = myvk::ImagelessFramebuffer::Create(pRenderPass, {pFrameManager->GetSwapchainImageViews()[0]});
 	});
 
-	using VkGSRaster::DeviceSorter;
+	using vkgsraster::DeviceSorter;
 	DeviceSorter sorter{pDevice, {.useKeyAsPayload = true}};
 	DeviceSorter::Resource sorterResource;
 
-	sorterResource.update(pDevice, kMaxSortKeyCount);
+	sorterResource.Update(pDevice, kMaxSortKeyCount);
 
 	auto pKeyBuffer = myvk::Buffer::Create(pDevice, kMaxSortKeyCount * sizeof(uint32_t), 0,
 	                                       VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | DeviceSorter::GetArgsUsage().keyBuffer);

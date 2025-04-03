@@ -13,7 +13,7 @@
 constexpr uint32_t kFrameCount = 3, kWidth = 1280, kHeight = 720;
 
 int main() {
-	using VkGSRaster::Rasterizer;
+	using vkgsraster::Rasterizer;
 
 	GLFWwindow *pWindow = myvk::GLFWCreateWindow("Test", kWidth, kHeight, false);
 
@@ -75,7 +75,7 @@ int main() {
 	bool forwardOutputImage = false;
 	Rasterizer rasterizer{pDevice, {.forwardOutputImage = forwardOutputImage}};
 	Rasterizer::Resource rasterizerResource;
-	rasterizerResource.updateImage(pDevice, kWidth, kHeight, rasterizer);
+	rasterizerResource.UpdateImage(pDevice, kWidth, kHeight, rasterizer);
 	auto pColorBuffer = myvk::Buffer::Create(pDevice, sizeof(float) * 3 * kWidth * kHeight, 0,
 	                                         Rasterizer::GetFwdArgsUsage().outColorBuffer);
 
@@ -99,14 +99,14 @@ int main() {
 					vkGsModel =
 					    VkGSModel::Create(pGenericQueue, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, GSModel::Load(filename));
 					if (!vkGsModel.IsEmpty())
-						rasterizerResource.updateBuffer(pDevice, vkGsModel.splatCount);
+						rasterizerResource.UpdateBuffer(pDevice, vkGsModel.splatCount);
 				}
 			}
 			if (ImGui::Checkbox("Output Image", &forwardOutputImage)) {
 				if (forwardOutputImage != rasterizer.GetConfig().forwardOutputImage) {
 					pGenericQueue->WaitIdle();
 					rasterizer = Rasterizer{pDevice, {.forwardOutputImage = forwardOutputImage}};
-					rasterizerResource.updateImage(pDevice, kWidth, kHeight, rasterizer);
+					rasterizerResource.UpdateImage(pDevice, kWidth, kHeight, rasterizer);
 				}
 			}
 			ImGui::Text("Splat Count: %u", vkGsModel.splatCount);

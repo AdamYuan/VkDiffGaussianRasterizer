@@ -8,7 +8,7 @@
 #include <myvk/CommandBuffer.hpp>
 #include <myvk/ComputePipeline.hpp>
 
-namespace VkGSRaster {
+namespace vkgsraster {
 
 class DeviceSorter {
 public:
@@ -45,7 +45,7 @@ public:
 		myvk::Ptr<myvk::BufferBase> pIndexBuffer;
 		myvk::Ptr<myvk::BufferBase> pDispatchArgBuffer;
 
-		void update(const myvk::Ptr<myvk::Device> &pDevice, uint32_t count, double growFactor = 1.5);
+		void Update(const myvk::Ptr<myvk::Device> &pDevice, uint32_t count, double growFactor = 1.5);
 	};
 
 private:
@@ -80,4 +80,4 @@ public:
 	static const ArgsUsage &GetArgsUsage();
 };
 
-} // namespace VkGSRaster
+} // namespace vkgsraster

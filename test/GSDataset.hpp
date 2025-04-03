@@ -13,7 +13,7 @@
 
 struct GSDataset {
 	struct Entry {
-		VkGSRaster::Camera camera;
+		vkgsraster::Camera camera;
 		std::string imageName;
 	};
 	std::vector<Entry> entries;

@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
 	auto pFence = myvk::Fence::Create(pDevice);
 
 	VkGSModel vkGsModel =
-	    VkGSModel::Create(pGenericQueue, VkGSRaster::Rasterizer::GetFwdArgsUsage().splatBuffers, GSModel::Load(argv[0]),
+	    VkGSModel::Create(pGenericQueue, vkgsraster::Rasterizer::GetFwdArgsUsage().splatBuffers, GSModel::Load(argv[0]),
 	                      [&](VkDeviceSize size, VkBufferUsageFlags usage) {
 		                      return VkCuBuffer::Create(pDevice, size, usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	                      });
@@ -57,10 +57,10 @@ int main(int argc, char **argv) {
 		return EXIT_FAILURE;
 	}
 
-	VkGSRaster::Rasterizer vkRasterizer{pDevice, {.forwardOutputImage = false}};
-	VkGSRaster::Rasterizer::Resource vkRasterResource = {};
-	vkRasterResource.updateBuffer(pDevice, vkGsModel.splatCount);
-	VkGSRaster::Rasterizer::FwdROArgs vkRasterFwdROArgs = {
+	vkgsraster::Rasterizer vkRasterizer{pDevice, {.forwardOutputImage = false}};
+	vkgsraster::Rasterizer::Resource vkRasterResource = {};
+	vkRasterResource.UpdateBuffer(pDevice, vkGsModel.splatCount);
+	vkgsraster::Rasterizer::FwdROArgs vkRasterFwdROArgs = {
 	    .splats =
 	        {
 	            .count = vkGsModel.splatCount,
@@ -72,19 +72,19 @@ int main(int argc, char **argv) {
 	        },
 	    .bgColor = {1.0f, 1.0f, 1.0f},
 	};
-	VkGSRaster::Rasterizer::FwdRWArgs vkRasterFwdRWArgs;
+	vkgsraster::Rasterizer::FwdRWArgs vkRasterFwdRWArgs;
 
 	CuTileRasterizer::Resource cuTileRasterResource{};
 	CuTileRasterizer::FwdROArgs cuTileRasterFwdROArgs{};
 	CuTileRasterizer::FwdRWArgs cuTileRasterFwdRWArgs{};
 
 	for (const auto &entry : gsDataset.entries) {
-		vkRasterResource.updateImage(pDevice, entry.camera.width, entry.camera.height, vkRasterizer);
+		vkRasterResource.UpdateImage(pDevice, entry.camera.width, entry.camera.height, vkRasterizer);
 		vkRasterFwdROArgs.camera = entry.camera;
 		std::size_t outColorBufferSize = 3 * entry.camera.width * entry.camera.height * sizeof(float);
 		if (!vkRasterFwdRWArgs.pOutColorBuffer || vkRasterFwdRWArgs.pOutColorBuffer->GetSize() < outColorBufferSize) {
 			vkRasterFwdRWArgs.pOutColorBuffer = VkCuBuffer::Create(
-			    pDevice, outColorBufferSize, VkGSRaster::Rasterizer::GetFwdArgsUsage().outColorBuffer,
+			    pDevice, outColorBufferSize, vkgsraster::Rasterizer::GetFwdArgsUsage().outColorBuffer,
 			    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 		}
 

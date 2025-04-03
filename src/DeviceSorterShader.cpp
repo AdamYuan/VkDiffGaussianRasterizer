@@ -4,7 +4,7 @@
 
 #include "DeviceSorter.hpp"
 
-namespace VkGSRaster {
+namespace vkgsraster {
 
 myvk::Ptr<myvk::ShaderModule> DeviceSorter::createResetShader(const myvk::Ptr<myvk::Device> &pDevice) {
 	static constexpr uint32_t kCode[] = {
@@ -58,4 +58,4 @@ myvk::Ptr<myvk::ShaderModule> DeviceSorter::createOneSweepShader(const myvk::Ptr
 	return nullptr;
 }
 
-} // namespace VkGSRaster
+} // namespace vkgsraster

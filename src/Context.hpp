@@ -9,7 +9,7 @@
 #include <myvk/Device.hpp>
 #include <myvk/Queue.hpp>
 
-namespace VkGSRaster {
+namespace vkgsraster {
 
 class Context {
 private:
@@ -25,6 +25,6 @@ public:
 	const myvk::Ptr<myvk::Queue> &GetQueue() const { return mpQueue; }
 };
 
-} // namespace VkGSRaster
+} // namespace vkgsraster
 
 #endif

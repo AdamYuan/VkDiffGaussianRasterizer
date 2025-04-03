@@ -13,7 +13,7 @@
 #include "Camera.hpp"
 #include "DeviceSorter.hpp"
 
-namespace VkGSRaster {
+namespace vkgsraster {
 
 class Rasterizer {
 public:
@@ -70,8 +70,8 @@ public:
 
 		myvk::Ptr<myvk::Framebuffer> pForwardFramebuffer;
 
-		void updateBuffer(const myvk::Ptr<myvk::Device> &pDevice, uint32_t splatCount, double growFactor = 1.5);
-		void updateImage(const myvk::Ptr<myvk::Device> &pDevice, uint32_t width, uint32_t height,
+		void UpdateBuffer(const myvk::Ptr<myvk::Device> &pDevice, uint32_t splatCount, double growFactor = 1.5);
+		void UpdateImage(const myvk::Ptr<myvk::Device> &pDevice, uint32_t width, uint32_t height,
 		                 const Rasterizer &rasterizer);
 	};
 
@@ -107,4 +107,4 @@ public:
 	static const FwdArgsUsage &GetFwdArgsUsage();
 };
 
-} // namespace VkGSRaster
+} // namespace vkgsraster

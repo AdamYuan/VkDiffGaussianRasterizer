@@ -9,7 +9,7 @@
 #include <array>
 #include <cinttypes>
 
-namespace VkGSRaster {
+namespace vkgsraster {
 
 struct Camera {
 	uint32_t width, height;
@@ -22,6 +22,6 @@ struct Camera {
 	// actually, tanFov = tan(fov / 2)
 };
 
-} // namespace VkGSRaster
+} // namespace vkgsraster
 
 #endif
