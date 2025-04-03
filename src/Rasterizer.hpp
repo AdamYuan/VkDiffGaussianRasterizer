@@ -40,10 +40,6 @@ public:
 		myvk::Ptr<myvk::BufferBase> pSHBuffer;      // P * [M * float3]
 	};
 
-	struct Metrics {
-		double forward, forwardView, forwardDraw, forwardSort;
-	};
-
 	struct FwdROArgs {
 		CameraArgs camera{};
 		uint32_t splatCount{};
@@ -90,6 +86,27 @@ public:
 		                 const Rasterizer &rasterizer);
 	};
 
+	struct PerfMetrics {
+		double forward, forwardView, forwardSort, forwardDraw;
+	};
+
+	struct PerfQuery {
+		enum Timestamp : uint32_t {
+			kForward,
+			kForwardView,
+			kForwardSort,
+			kForwardDraw,
+			kTimestampCount,
+		};
+		myvk::Ptr<myvk::QueryPool> pQueryPool;
+		// myvk::Ptr<myvk::BufferBase> pResultBuffer;
+		// const uint64_t *pMappedResults;
+
+		static PerfQuery Create(const myvk::Ptr<myvk::Device> &pDevice);
+		void CmdWriteTimestamp(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, Timestamp timestamp) const;
+		PerfMetrics GetMetrics() const;
+	};
+
 private:
 	Config mConfig;
 
@@ -114,7 +131,7 @@ public:
 	const Config &GetConfig() const { return mConfig; }
 
 	void CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const FwdROArgs &roArgs,
-	                const FwdRWArgs &rwArgs, const Resource &resource) const;
+	                const FwdRWArgs &rwArgs, const Resource &resource, const PerfQuery &perfQuery = {}) const;
 
 	static const FwdRWArgsSyncState &GetSrcFwdRWArgsSync();
 	static const FwdRWArgsSyncState &GetDstFwdRWArgsSync();

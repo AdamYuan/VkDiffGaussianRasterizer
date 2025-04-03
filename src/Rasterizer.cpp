@@ -47,6 +47,46 @@ void Rasterizer::Resource::UpdateImage(const myvk::Ptr<myvk::Device> &pDevice, u
 	ResizeFramebuffer(rasterizer.mpForwardRenderPass, {}, pForwardFramebuffer, width, height);
 }
 
+Rasterizer::PerfQuery Rasterizer::PerfQuery::Create(const myvk::Ptr<myvk::Device> &pDevice) {
+	PerfQuery perfQuery{};
+	perfQuery.pQueryPool = myvk::QueryPool::Create(pDevice, VK_QUERY_TYPE_TIMESTAMP, kTimestampCount);
+
+	/* auto pResultBuffer =
+	    myvk::Buffer::Create(pDevice, kQueryCount * sizeof(uint64_t),
+	                         VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
+	                         VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+	perfQuery.pResultBuffer = pResultBuffer;
+	perfQuery.pMappedResults = reinterpret_cast<const uint64_t *>(pResultBuffer->GetMappedData()); */
+	return perfQuery;
+}
+void Rasterizer::PerfQuery::CmdWriteTimestamp(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer,
+                                              Timestamp timestamp) const {
+	if (!pQueryPool)
+		return;
+	vkCmdWriteTimestamp2(pCommandBuffer->GetHandle(), VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, pQueryPool->GetHandle(),
+	                     static_cast<uint32_t>(timestamp));
+}
+Rasterizer::PerfMetrics Rasterizer::PerfQuery::GetMetrics() const {
+	std::array<uint64_t, kTimestampCount> results{};
+	if (pQueryPool->GetResults64(0, kTimestampCount, results.data(), 0) != VK_SUCCESS)
+		return {}; // Not ready
+	pQueryPool->Reset(0, kTimestampCount);
+
+	auto timestampPeriod =
+	    (double)pQueryPool->GetDevicePtr()->GetPhysicalDevicePtr()->GetProperties().vk10.limits.timestampPeriod;
+
+	const auto getSeconds = [&](Timestamp l, Timestamp r) {
+		return double(results[r] - results[l]) * timestampPeriod / 1e9;
+	};
+
+	return PerfMetrics{
+	    .forward = getSeconds(kForward, kForwardDraw),
+	    .forwardView = getSeconds(kForward, kForwardView),
+	    .forwardSort = getSeconds(kForwardView, kForwardSort),
+	    .forwardDraw = getSeconds(kForwardSort, kForwardDraw),
+	};
+}
+
 namespace {
 struct PushConstantData {
 	std::array<float, 3> bgColor;
@@ -172,7 +212,7 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 }
 
 void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const FwdROArgs &roArgs,
-                            const FwdRWArgs &rwArgs, const Resource &resource) const {
+                            const FwdRWArgs &rwArgs, const Resource &resource, const PerfQuery &perfQuery) const {
 	std::vector descriptorSetWrites = {
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.splats.pMeanBuffer, SBUF_MEANS_BINDING),
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.splats.pScaleBuffer, SBUF_SCALES_BINDING),
@@ -228,6 +268,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	    {});
 	pCommandBuffer->CmdBindPipeline(mpForwardResetPipeline);
 	pCommandBuffer->CmdDispatch(1, 1, 1);
+	perfQuery.CmdWriteTimestamp(pCommandBuffer, PerfQuery::Timestamp::kForward);
 
 	// View
 	pCommandBuffer->CmdPipelineBarrier2(
@@ -259,6 +300,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	    {});
 	pCommandBuffer->CmdBindPipeline(mpForwardViewPipeline);
 	pCommandBuffer->CmdDispatch((roArgs.splatCount + FORWARD_VIEW_DIM - 1) / FORWARD_VIEW_DIM, 1, 1);
+	perfQuery.CmdWriteTimestamp(pCommandBuffer, PerfQuery::Timestamp::kForwardView);
 
 	// Prepare for Sort (+ Read-After-Write Barrier for pDrawArgBuffer)
 	pCommandBuffer->CmdPipelineBarrier2( //
@@ -286,6 +328,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	mSorter.CmdSort(pCommandBuffer, {.pCountBuffer = resource.pDrawArgBuffer},
 	                {.pKeyBuffer = resource.pSortKeyBuffer, .pPayloadBuffer = resource.pSortPayloadBuffer},
 	                resource.sorterResource);
+	perfQuery.CmdWriteTimestamp(pCommandBuffer, PerfQuery::Timestamp::kForwardSort);
 
 	// Rebind again after Sort
 	pCommandBuffer->CmdPushDescriptorSet(mpPipelineLayout, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, descriptorSetWrites);
@@ -359,7 +402,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	    .extent = {.width = roArgs.camera.width, .height = roArgs.camera.height},
 	}});
 	pCommandBuffer->CmdDrawIndirect(resource.pDrawArgBuffer, 0, 1);
-	// pCommandBuffer->CmdDraw(1, 1, 0, 0);
+	perfQuery.CmdWriteTimestamp(pCommandBuffer, PerfQuery::Timestamp::kForwardDraw);
 	pCommandBuffer->CmdEndRenderPass();
 
 	if (mConfig.forwardOutputImage) {

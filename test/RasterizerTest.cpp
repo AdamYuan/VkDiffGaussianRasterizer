@@ -81,6 +81,12 @@ int main() {
 
 	VkGSModel vkGsModel{};
 
+	std::array<Rasterizer::PerfQuery, kFrameCount> rasterizerPerfQueries;
+	for (auto &query : rasterizerPerfQueries)
+		query = Rasterizer::PerfQuery::Create(pDevice);
+
+	Rasterizer::PerfMetrics rasterizerPerfMetrics{};
+
 	while (!glfwWindowShouldClose(pWindow)) {
 		glfwPollEvents();
 
@@ -110,6 +116,10 @@ int main() {
 				}
 			}
 			ImGui::Text("Splat Count: %u", vkGsModel.splatCount);
+			ImGui::Text("Forward: %lf ms", rasterizerPerfMetrics.forward * 1000.0);
+			ImGui::Text("Forward View: %lf ms", rasterizerPerfMetrics.forwardView * 1000.0);
+			ImGui::Text("Forward Sort: %lf ms", rasterizerPerfMetrics.forwardSort * 1000.0);
+			ImGui::Text("Forward Draw: %lf ms", rasterizerPerfMetrics.forwardDraw * 1000.0);
 			ImGui::End();
 
 			ImGui::Render();
@@ -120,6 +130,9 @@ int main() {
 			const auto &pCommandBuffer = pFrameManager->GetCurrentCommandBuffer();
 			const auto &pSwapchainImage = pFrameManager->GetCurrentSwapchainImage();
 			const auto &pSwapchainImageView = pFrameManager->GetCurrentSwapchainImageView();
+			const auto &rasterizerPerfQuery = rasterizerPerfQueries[currentFrame];
+
+			rasterizerPerfMetrics = rasterizerPerfQuery.GetMetrics();
 
 			pCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
@@ -157,7 +170,7 @@ int main() {
 				                          .pOutColorBuffer = pColorBuffer,
 				                          .pOutColorImage = pSwapchainImage,
 				                      },
-				                      rasterizerResource);
+				                      rasterizerResource, rasterizerPerfQuery);
 			}
 
 			pCommandBuffer->CmdBeginRenderPass(pRenderPass, pFramebuffer, {pSwapchainImageView}, {{{}}});
