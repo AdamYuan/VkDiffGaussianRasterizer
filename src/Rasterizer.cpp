@@ -75,15 +75,15 @@ Rasterizer::PerfMetrics Rasterizer::PerfQuery::GetMetrics() const {
 	auto timestampPeriod =
 	    (double)pQueryPool->GetDevicePtr()->GetPhysicalDevicePtr()->GetProperties().vk10.limits.timestampPeriod;
 
-	const auto getSeconds = [&](Timestamp l, Timestamp r) {
-		return double(results[r] - results[l]) * timestampPeriod / 1e9;
+	const auto getMilliseconds = [&](Timestamp l, Timestamp r) {
+		return double(results[r] - results[l]) * timestampPeriod / 1e6;
 	};
 
 	return PerfMetrics{
-	    .forward = getSeconds(kForward, kForwardDraw),
-	    .forwardView = getSeconds(kForward, kForwardView),
-	    .forwardSort = getSeconds(kForwardView, kForwardSort),
-	    .forwardDraw = getSeconds(kForwardSort, kForwardDraw),
+	    .forward = getMilliseconds(kForward, kForwardDraw),
+	    .forwardView = getMilliseconds(kForward, kForwardView),
+	    .forwardSort = getMilliseconds(kForwardView, kForwardSort),
+	    .forwardDraw = getMilliseconds(kForwardSort, kForwardDraw),
 	};
 }
 

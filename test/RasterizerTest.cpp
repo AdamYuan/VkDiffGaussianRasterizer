@@ -116,10 +116,10 @@ int main() {
 				}
 			}
 			ImGui::Text("Splat Count: %u", vkGsModel.splatCount);
-			ImGui::Text("Forward: %lf ms", rasterizerPerfMetrics.forward * 1000.0);
-			ImGui::Text("Forward View: %lf ms", rasterizerPerfMetrics.forwardView * 1000.0);
-			ImGui::Text("Forward Sort: %lf ms", rasterizerPerfMetrics.forwardSort * 1000.0);
-			ImGui::Text("Forward Draw: %lf ms", rasterizerPerfMetrics.forwardDraw * 1000.0);
+			ImGui::Text("Forward: %lf ms", rasterizerPerfMetrics.forward);
+			ImGui::Text("Forward View: %lf ms", rasterizerPerfMetrics.forwardView);
+			ImGui::Text("Forward Sort: %lf ms", rasterizerPerfMetrics.forwardSort);
+			ImGui::Text("Forward Draw: %lf ms", rasterizerPerfMetrics.forwardDraw);
 			ImGui::End();
 
 			ImGui::Render();
