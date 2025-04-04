@@ -57,6 +57,8 @@ int main(int argc, char **argv) {
 		return EXIT_FAILURE;
 	}
 
+	printf("splatCount = %d\n", vkGsModel.splatCount);
+
 	vkgsraster::Rasterizer vkRasterizer{pDevice, {.forwardOutputImage = false}};
 	vkgsraster::Rasterizer::Resource vkRasterResource = {};
 	vkRasterResource.UpdateBuffer(pDevice, vkGsModel.splatCount);
@@ -110,7 +112,8 @@ int main(int argc, char **argv) {
 		                           cuTileRasterPerfQuery);
 
 		auto cuTileRasterPerfMetrics = cuTileRasterPerfQuery.GetMetrics();
-		printf("cu_forward: %lf ms\n", cuTileRasterPerfMetrics.forward);
+		printf("cu_forward: %lf ms (numRendered = %d)\n", cuTileRasterPerfMetrics.forward,
+		       cuTileRasterResource.numRendered);
 		printf("cu_backward: %lf ms\n", cuTileRasterPerfMetrics.backward);
 		CuImageWrite::Write(entry.imageName + "_cu.png", cuOutColors, entry.camera.width, entry.camera.height);
 
