@@ -66,6 +66,15 @@ public:
 		VkImageUsageFlags outColorImage;
 	};
 
+	struct BwdROArgs {
+		FwdROArgs fwd;
+		myvk::Ptr<myvk::BufferBase> pdL_dColorBuffer;
+	};
+
+	struct BwdRWArgs {
+		SplatArgs dL_dSplats{};
+	};
+
 	struct Resource {
 		DeviceSorter::Resource sorterResource;
 

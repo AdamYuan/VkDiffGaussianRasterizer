@@ -41,11 +41,11 @@ int main(int argc, char **argv) {
 	auto pCommandBuffer = myvk::CommandBuffer::Create(pCommandPool);
 	auto pFence = myvk::Fence::Create(pDevice);
 
-	VkGSModel vkGsModel =
-	    VkGSModel::Create(pGenericQueue, vkgsraster::Rasterizer::GetFwdArgsUsage().splatBuffers, GSModel::Load(argv[0]),
-	                      [&](VkDeviceSize size, VkBufferUsageFlags usage) {
-		                      return VkCuBuffer::Create(pDevice, size, usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	                      });
+	const auto createVkCuBuffer = [&](VkDeviceSize size, VkBufferUsageFlags usage) {
+		return VkCuBuffer::Create(pDevice, size, usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	};
+	VkGSModel vkGsModel = VkGSModel::Create(pGenericQueue, vkgsraster::Rasterizer::GetFwdArgsUsage().splatBuffers,
+	                                        GSModel::Load(argv[0]), createVkCuBuffer);
 	GSDataset gsDataset = GSDataset::Load(argv[1]);
 
 	if (vkGsModel.IsEmpty()) {
@@ -67,25 +67,52 @@ int main(int argc, char **argv) {
 	    .bgColor = {1.0f, 1.0f, 1.0f},
 	};
 	vkgsraster::Rasterizer::FwdRWArgs vkRasterFwdRWArgs;
+	vkgsraster::Rasterizer::BwdROArgs vkRasterBwdROArgs = {
+	    .fwd = vkRasterFwdROArgs,
+	};
+	vkgsraster::Rasterizer::BwdRWArgs vkRasterBwdRWArgs = {
+	    .dL_dSplats = VkGSModel::Create(pDevice, 0 /* TODO */, vkGsModel.splatCount, createVkCuBuffer).GetSplatArgs(),
+	};
 
 	CuTileRasterizer::Resource cuTileRasterResource{};
 	CuTileRasterizer::FwdROArgs cuTileRasterFwdROArgs{};
 	CuTileRasterizer::FwdRWArgs cuTileRasterFwdRWArgs{};
+	CuTileRasterizer::BwdROArgs cuTileRasterBwdROArgs{};
+	CuTileRasterizer::BwdRWArgs cuTileRasterBwdRWArgs{};
 	CuTileRasterizer::PerfQuery cuTileRasterPerfQuery = CuTileRasterizer::PerfQuery::Create();
 
 	for (const auto &entry : gsDataset.entries) {
 		vkRasterResource.UpdateImage(pDevice, entry.camera.width, entry.camera.height, vkRasterizer);
 		vkRasterFwdROArgs.camera = entry.camera;
-		std::size_t outColorBufferSize = 3 * entry.camera.width * entry.camera.height * sizeof(float);
-		if (!vkRasterFwdRWArgs.pOutColorBuffer || vkRasterFwdRWArgs.pOutColorBuffer->GetSize() < outColorBufferSize) {
-			vkRasterFwdRWArgs.pOutColorBuffer = VkCuBuffer::Create(
-			    pDevice, outColorBufferSize, vkgsraster::Rasterizer::GetFwdArgsUsage().outColorBuffer,
-			    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		std::size_t colorBufferSize = 3 * entry.camera.width * entry.camera.height * sizeof(float);
+		if (!vkRasterFwdRWArgs.pOutColorBuffer || vkRasterFwdRWArgs.pOutColorBuffer->GetSize() < colorBufferSize) {
+			vkRasterFwdRWArgs.pOutColorBuffer =
+			    VkCuBuffer::Create(pDevice, colorBufferSize, vkgsraster::Rasterizer::GetFwdArgsUsage().outColorBuffer,
+			                       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		}
+		if (!vkRasterBwdROArgs.pdL_dColorBuffer || vkRasterBwdROArgs.pdL_dColorBuffer->GetSize() < colorBufferSize) {
+			vkRasterBwdROArgs.pdL_dColorBuffer =
+			    VkCuBuffer::Create(pDevice, colorBufferSize, 0 /* TODO */, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 		}
 
 		cuTileRasterFwdROArgs.Update(vkRasterFwdROArgs);
 		cuTileRasterFwdRWArgs.Update(vkRasterFwdRWArgs);
-		float *cuOutColors = cuTileRasterFwdRWArgs.outColor;
+		cuTileRasterBwdROArgs.Update(cuTileRasterFwdROArgs, vkRasterBwdROArgs);
+		cuTileRasterBwdRWArgs.Update(vkRasterBwdRWArgs);
+		float *cuOutColors = cuTileRasterFwdRWArgs.outColors;
+
+		CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource);
+		CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource,
+		                          cuTileRasterPerfQuery);
+
+		CuTileRasterizer::Backward(cuTileRasterBwdROArgs, cuTileRasterBwdRWArgs, cuTileRasterResource);
+		CuTileRasterizer::Backward(cuTileRasterBwdROArgs, cuTileRasterBwdRWArgs, cuTileRasterResource,
+		                           cuTileRasterPerfQuery);
+
+		auto cuTileRasterPerfMetrics = cuTileRasterPerfQuery.GetMetrics();
+		printf("cu_forward: %lf ms\n", cuTileRasterPerfMetrics.forward);
+		printf("cu_backward: %lf ms\n", cuTileRasterPerfMetrics.backward);
+		CuImageWrite::Write(entry.imageName + "_cu.png", cuOutColors, entry.camera.width, entry.camera.height);
 
 		pCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 		vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource,
@@ -99,14 +126,6 @@ int main(int argc, char **argv) {
 		auto vkRasterPerfMetrics = vkRasterPerfQuery.GetMetrics();
 		printf("vk_forward: %lf ms\n", vkRasterPerfMetrics.forward);
 		CuImageWrite::Write(entry.imageName + "_vk.png", cuOutColors, entry.camera.width, entry.camera.height);
-
-		CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource);
-		CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource,
-		                          cuTileRasterPerfQuery);
-
-		auto cuTileRasterPerfMetrics = cuTileRasterPerfQuery.GetMetrics();
-		printf("cu_forward: %lf ms\n", cuTileRasterPerfMetrics.forward);
-		CuImageWrite::Write(entry.imageName + "_cu.png", cuOutColors, entry.camera.width, entry.camera.height);
 
 		break; // Only once entry
 	}

@@ -17,15 +17,17 @@ struct CuTileRasterizer {
 
 			char *Update(std::size_t updateSize);
 		};
-		ResizeableBuffer geometryBuffer{}, binningBuffer{}, imageBuffer{};
+		ResizeableBuffer geometryBuffer{}, binningBuffer{}, imageBuffer{}, dLBuffer{};
+
+		int numRendered{};
 	};
 
 	struct PerfMetrics {
-		float forward;
+		float forward, backward;
 	};
 
 	struct PerfQuery {
-		enum Event : uint32_t { kForwardStart, kForwardEnd, kEventCount };
+		enum Event : uint32_t { kForwardStart, kForwardEnd, kBackwardStart, kBackwardEnd, kEventCount };
 		std::array<uintptr_t, kEventCount> events;
 
 		static PerfQuery Create();
@@ -34,11 +36,11 @@ struct CuTileRasterizer {
 	};
 
 	struct SplatArgs {
-		const float *means{};
-		const float *scales{};
-		const float *rotates{};
-		const float *opacities{};
-		const float *shs{};
+		float *means{};
+		float *scales{};
+		float *rotates{};
+		float *opacities{};
+		float *shs{};
 	};
 
 	struct CameraArgs {
@@ -61,13 +63,29 @@ struct CuTileRasterizer {
 	};
 
 	struct FwdRWArgs {
-		float *outColor{};
+		float *outColors{};
 
 		void Update(const vkgsraster::Rasterizer::FwdRWArgs &vkRWArgs);
 	};
 
+	struct BwdROArgs {
+		FwdROArgs fwd{};
+		const float *dL_dColors{};
+
+		void Update(const FwdROArgs &fwdROArgs, const vkgsraster::Rasterizer::BwdROArgs &vkROArgs);
+	};
+
+	struct BwdRWArgs {
+		SplatArgs dL_dSplats;
+
+		void Update(const vkgsraster::Rasterizer::BwdRWArgs &vkRWArgs);
+	};
+
 	static void Forward(const FwdROArgs &roArgs, const FwdRWArgs &rwArgs, Resource &resource,
 	                    const PerfQuery &perfQuery = PerfQuery{});
+
+	static void Backward(const BwdROArgs &roArgs, const BwdRWArgs &rwArgs, Resource &resource,
+	                     const PerfQuery &perfQuery = PerfQuery{});
 };
 
 #endif

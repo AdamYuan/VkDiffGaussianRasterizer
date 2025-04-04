@@ -28,7 +28,7 @@ char *CuTileRasterizer::Resource::ResizeableBuffer::Update(std::size_t updateSiz
 }
 
 CuTileRasterizer::PerfQuery CuTileRasterizer::PerfQuery::Create() {
-	PerfQuery query;
+	PerfQuery query{};
 	for (uint32_t i = 0; i < kEventCount; ++i) {
 		cudaEvent_t event;
 		cudaEventCreate(&event);
@@ -41,10 +41,12 @@ void CuTileRasterizer::PerfQuery::Record(Event event) const {
 		cudaEventRecord((cudaEvent_t)events[event]);
 }
 CuTileRasterizer::PerfMetrics CuTileRasterizer::PerfQuery::GetMetrics() const {
-	cudaEventSynchronize((cudaEvent_t)events[kEventCount - 1]);
+	for (uint32_t i = 0; i < kEventCount; ++i)
+		cudaEventSynchronize((cudaEvent_t)events[i]);
 
 	PerfMetrics metrics{};
 	cudaEventElapsedTime(&metrics.forward, (cudaEvent_t)events[kForwardStart], (cudaEvent_t)events[kForwardEnd]);
+	cudaEventElapsedTime(&metrics.backward, (cudaEvent_t)events[kBackwardStart], (cudaEvent_t)events[kBackwardEnd]);
 
 	return metrics;
 }
@@ -149,22 +151,77 @@ void CuTileRasterizer::FwdROArgs::Update(const vkgsraster::Rasterizer::FwdROArgs
 }
 
 void CuTileRasterizer::FwdRWArgs::Update(const vkgsraster::Rasterizer::FwdRWArgs &vkRWArgs) {
-	outColor = std::static_pointer_cast<VkCuBuffer>(vkRWArgs.pOutColorBuffer)->GetCudaMappedPtr<float>();
+	outColors = std::static_pointer_cast<VkCuBuffer>(vkRWArgs.pOutColorBuffer)->GetCudaMappedPtr<float>();
+}
+
+void CuTileRasterizer::BwdROArgs::Update(const FwdROArgs &fwdROArgs,
+                                         const vkgsraster::Rasterizer::BwdROArgs &vkROArgs) {
+	fwd = fwdROArgs;
+	dL_dColors = std::static_pointer_cast<VkCuBuffer>(vkROArgs.pdL_dColorBuffer)->GetCudaMappedPtr<float>();
+}
+
+void CuTileRasterizer::BwdRWArgs::Update(const vkgsraster::Rasterizer::BwdRWArgs &vkRWArgs) {
+	dL_dSplats = {
+	    .means = std::static_pointer_cast<VkCuBuffer>(vkRWArgs.dL_dSplats.pMeanBuffer)->GetCudaMappedPtr<float>(),
+	    .scales = std::static_pointer_cast<VkCuBuffer>(vkRWArgs.dL_dSplats.pScaleBuffer)->GetCudaMappedPtr<float>(),
+	    .rotates = std::static_pointer_cast<VkCuBuffer>(vkRWArgs.dL_dSplats.pRotateBuffer)->GetCudaMappedPtr<float>(),
+	    .opacities =
+	        std::static_pointer_cast<VkCuBuffer>(vkRWArgs.dL_dSplats.pOpacityBuffer)->GetCudaMappedPtr<float>(),
+	    .shs = std::static_pointer_cast<VkCuBuffer>(vkRWArgs.dL_dSplats.pSHBuffer)->GetCudaMappedPtr<float>(),
+	};
 }
 
 void CuTileRasterizer::Forward(const FwdROArgs &roArgs, const FwdRWArgs &rwArgs, Resource &resource,
                                const PerfQuery &perfQuery) {
 
+	cudaDeviceSynchronize();
 	perfQuery.Record(PerfQuery::Event::kForwardStart);
 
-	CudaRasterizer::Rasterizer::forward(
+	resource.numRendered = CudaRasterizer::Rasterizer::forward(
 	    [&](std::size_t size) { return resource.geometryBuffer.Update(size); },
 	    [&](std::size_t size) { return resource.binningBuffer.Update(size); },
 	    [&](std::size_t size) { return resource.imageBuffer.Update(size); }, (int)roArgs.splatCount, GSModel::kSHDegree,
 	    GSModel::kSHSize, roArgs.bgColor, roArgs.camera.width, roArgs.camera.height, roArgs.splats.means,
 	    roArgs.splats.shs, nullptr, roArgs.splats.opacities, roArgs.splats.scales, 1.0f, roArgs.splats.rotates, nullptr,
 	    roArgs.camera.viewMat, roArgs.camera.projMat, roArgs.camera.pos, roArgs.camera.tanFovX, roArgs.camera.tanFovY,
-	    false, rwArgs.outColor);
+	    false, rwArgs.outColors);
 
 	perfQuery.Record(PerfQuery::Event::kForwardEnd);
+	cudaDeviceSynchronize();
+}
+
+void CuTileRasterizer::Backward(const BwdROArgs &roArgs, const BwdRWArgs &rwArgs, Resource &resource,
+                                const PerfQuery &perfQuery) {
+	cudaDeviceSynchronize();
+	perfQuery.Record(PerfQuery::Event::kBackwardStart);
+
+	/* torch::Tensor dL_dmeans2D = torch::zeros({P, 3}, means3D.options());
+	torch::Tensor dL_dcolors = torch::zeros({P, NUM_CHANNELS}, means3D.options());
+	torch::Tensor dL_dconic = torch::zeros({P, 2, 2}, means3D.options());
+	torch::Tensor dL_dcov3D = torch::zeros({P, 6}, means3D.options()); */
+
+	std::size_t dL_dmean2D_count = roArgs.fwd.splatCount * 3;
+	std::size_t dL_dcolor_count = roArgs.fwd.splatCount * 3;
+	std::size_t dL_dconic_count = roArgs.fwd.splatCount * 4;
+	std::size_t dL_dcov3D_count = roArgs.fwd.splatCount * 6;
+
+	auto dL = reinterpret_cast<float *>(resource.dLBuffer.Update(
+	    (dL_dmean2D_count + dL_dcolor_count + dL_dconic_count + dL_dcov3D_count) * sizeof(float)));
+
+	float *dL_dmean2Ds = dL;
+	float *dL_dcolors = dL_dmean2Ds + dL_dmean2D_count;
+	float *dL_dconics = dL_dcolors + dL_dcolor_count;
+	float *dL_dcov3D = dL_dconics + dL_dconic_count;
+
+	CudaRasterizer::Rasterizer::backward(
+	    (int)roArgs.fwd.splatCount, GSModel::kSHDegree, GSModel::kSHSize, resource.numRendered, roArgs.fwd.bgColor,
+	    roArgs.fwd.camera.width, roArgs.fwd.camera.height, roArgs.fwd.splats.means, roArgs.fwd.splats.shs, nullptr,
+	    roArgs.fwd.splats.scales, 1.0f, roArgs.fwd.splats.rotates, nullptr, roArgs.fwd.camera.viewMat,
+	    roArgs.fwd.camera.projMat, roArgs.fwd.camera.pos, roArgs.fwd.camera.tanFovX, roArgs.fwd.camera.tanFovY, nullptr,
+	    resource.geometryBuffer.data, resource.binningBuffer.data, resource.imageBuffer.data, roArgs.dL_dColors,
+	    dL_dmean2Ds, dL_dconics, rwArgs.dL_dSplats.opacities, dL_dcolors, rwArgs.dL_dSplats.means, dL_dcov3D,
+	    rwArgs.dL_dSplats.shs, rwArgs.dL_dSplats.scales, rwArgs.dL_dSplats.rotates, false);
+
+	perfQuery.Record(PerfQuery::Event::kBackwardEnd);
+	cudaDeviceSynchronize();
 }
