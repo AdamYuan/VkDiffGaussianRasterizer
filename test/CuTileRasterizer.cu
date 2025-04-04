@@ -192,21 +192,23 @@ void CuTileRasterizer::Forward(const FwdROArgs &roArgs, const FwdRWArgs &rwArgs,
 
 void CuTileRasterizer::Backward(const BwdROArgs &roArgs, const BwdRWArgs &rwArgs, Resource &resource,
                                 const PerfQuery &perfQuery) {
-	cudaDeviceSynchronize();
-	perfQuery.Record(PerfQuery::Event::kBackwardStart);
-
 	/* torch::Tensor dL_dmeans2D = torch::zeros({P, 3}, means3D.options());
 	torch::Tensor dL_dcolors = torch::zeros({P, NUM_CHANNELS}, means3D.options());
 	torch::Tensor dL_dconic = torch::zeros({P, 2, 2}, means3D.options());
 	torch::Tensor dL_dcov3D = torch::zeros({P, 6}, means3D.options()); */
 
-	std::size_t dL_dmean2D_count = roArgs.fwd.splatCount * 3;
-	std::size_t dL_dcolor_count = roArgs.fwd.splatCount * 3;
-	std::size_t dL_dconic_count = roArgs.fwd.splatCount * 4;
-	std::size_t dL_dcov3D_count = roArgs.fwd.splatCount * 6;
+	uint32_t dL_dmean2D_count = roArgs.fwd.splatCount * 3;
+	uint32_t dL_dcolor_count = roArgs.fwd.splatCount * 3;
+	uint32_t dL_dconic_count = roArgs.fwd.splatCount * 4;
+	uint32_t dL_dcov3D_count = roArgs.fwd.splatCount * 6;
+	uint32_t dL_count = dL_dmean2D_count + dL_dcolor_count + dL_dconic_count + dL_dcov3D_count;
 
-	auto dL = reinterpret_cast<float *>(resource.dLBuffer.Update(
-	    (dL_dmean2D_count + dL_dcolor_count + dL_dconic_count + dL_dcov3D_count) * sizeof(float)));
+	auto dL = reinterpret_cast<float *>(resource.dLBuffer.Update(dL_count * sizeof(float)));
+
+	cudaDeviceSynchronize();
+	perfQuery.Record(PerfQuery::Event::kBackwardStart);
+
+	cudaMemset(dL, 0, dL_count * sizeof(float));
 
 	float *dL_dmean2Ds = dL;
 	float *dL_dcolors = dL_dmean2Ds + dL_dmean2D_count;
