@@ -120,7 +120,7 @@ int main(int argc, char **argv) {
 		cuTileRasterFwdRWArgs.Update(vkRasterFwdRWArgs);
 		cuTileRasterBwdROArgs.Update(cuTileRasterFwdROArgs, vkRasterBwdROArgs);
 		cuTileRasterBwdRWArgs.Update(vkRasterBwdRWArgs);
-		float *cuOutColors = cuTileRasterFwdRWArgs.outColors;
+		float *cuOutPixels = cuTileRasterFwdRWArgs.outPixels;
 
 		CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource);
 		CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource,
@@ -134,7 +134,7 @@ int main(int argc, char **argv) {
 		printf("cu_forward: %lf ms (numRendered = %d)\n", cuTileRasterPerfMetrics.forward,
 		       cuTileRasterResource.numRendered);
 		printf("cu_backward: %lf ms\n", cuTileRasterPerfMetrics.backward);
-		CuImageWrite::Write(entry.imageName + "_cu.png", cuOutColors, entry.camera.width, entry.camera.height);
+		CuImageWrite::Write(entry.imageName + "_cu.png", cuOutPixels, entry.camera.width, entry.camera.height);
 
 		pCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 		vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource,
@@ -147,7 +147,7 @@ int main(int argc, char **argv) {
 
 		auto vkRasterPerfMetrics = vkRasterPerfQuery.GetMetrics();
 		printf("vk_forward: %lf ms\n", vkRasterPerfMetrics.forward);
-		CuImageWrite::Write(entry.imageName + "_vk.png", cuOutColors, entry.camera.width, entry.camera.height);
+		CuImageWrite::Write(entry.imageName + "_vk.png", cuOutPixels, entry.camera.width, entry.camera.height);
 
 		break; // Only once entry
 	}

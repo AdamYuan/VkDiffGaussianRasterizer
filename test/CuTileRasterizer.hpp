@@ -63,14 +63,14 @@ struct CuTileRasterizer {
 	};
 
 	struct FwdRWArgs {
-		float *outColors{};
+		float *outPixels{};
 
 		void Update(const vkgsraster::Rasterizer::FwdRWArgs &vkRWArgs);
 	};
 
 	struct BwdROArgs {
 		FwdROArgs fwd{};
-		const float *dL_dColors{};
+		const float *dL_dPixels{};
 
 		void Update(const FwdROArgs &fwdROArgs, const vkgsraster::Rasterizer::BwdROArgs &vkROArgs);
 	};

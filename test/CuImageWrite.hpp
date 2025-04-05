@@ -9,7 +9,7 @@
 #include <filesystem>
 
 struct CuImageWrite {
-	static void Write(const std::filesystem::path &filename, const float *deviceColors, uint32_t width, uint32_t height);
+	static void Write(const std::filesystem::path &filename, const float *devicePixels, uint32_t width, uint32_t height);
 };
 
 #endif

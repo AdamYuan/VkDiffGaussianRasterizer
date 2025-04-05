@@ -151,13 +151,13 @@ void CuTileRasterizer::FwdROArgs::Update(const vkgsraster::Rasterizer::FwdROArgs
 }
 
 void CuTileRasterizer::FwdRWArgs::Update(const vkgsraster::Rasterizer::FwdRWArgs &vkRWArgs) {
-	outColors = std::static_pointer_cast<VkCuBuffer>(vkRWArgs.pOutPixelBuffer)->GetCudaMappedPtr<float>();
+	outPixels = std::static_pointer_cast<VkCuBuffer>(vkRWArgs.pOutPixelBuffer)->GetCudaMappedPtr<float>();
 }
 
 void CuTileRasterizer::BwdROArgs::Update(const FwdROArgs &fwdROArgs,
                                          const vkgsraster::Rasterizer::BwdROArgs &vkROArgs) {
 	fwd = fwdROArgs;
-	dL_dColors = std::static_pointer_cast<VkCuBuffer>(vkROArgs.pdL_dPixelBuffer)->GetCudaMappedPtr<float>();
+	dL_dPixels = std::static_pointer_cast<VkCuBuffer>(vkROArgs.pdL_dPixelBuffer)->GetCudaMappedPtr<float>();
 }
 
 void CuTileRasterizer::BwdRWArgs::Update(const vkgsraster::Rasterizer::BwdRWArgs &vkRWArgs) {
@@ -184,7 +184,7 @@ void CuTileRasterizer::Forward(const FwdROArgs &roArgs, const FwdRWArgs &rwArgs,
 	    GSModel::kSHSize, roArgs.bgColor, roArgs.camera.width, roArgs.camera.height, roArgs.splats.means,
 	    roArgs.splats.shs, nullptr, roArgs.splats.opacities, roArgs.splats.scales, 1.0f, roArgs.splats.rotates, nullptr,
 	    roArgs.camera.viewMat, roArgs.camera.projMat, roArgs.camera.pos, roArgs.camera.tanFovX, roArgs.camera.tanFovY,
-	    false, rwArgs.outColors);
+	    false, rwArgs.outPixels);
 
 	perfQuery.Record(PerfQuery::Event::kForwardEnd);
 	cudaDeviceSynchronize();
@@ -220,7 +220,7 @@ void CuTileRasterizer::Backward(const BwdROArgs &roArgs, const BwdRWArgs &rwArgs
 	    roArgs.fwd.camera.width, roArgs.fwd.camera.height, roArgs.fwd.splats.means, roArgs.fwd.splats.shs, nullptr,
 	    roArgs.fwd.splats.scales, 1.0f, roArgs.fwd.splats.rotates, nullptr, roArgs.fwd.camera.viewMat,
 	    roArgs.fwd.camera.projMat, roArgs.fwd.camera.pos, roArgs.fwd.camera.tanFovX, roArgs.fwd.camera.tanFovY, nullptr,
-	    resource.geometryBuffer.data, resource.binningBuffer.data, resource.imageBuffer.data, roArgs.dL_dColors,
+	    resource.geometryBuffer.data, resource.binningBuffer.data, resource.imageBuffer.data, roArgs.dL_dPixels,
 	    dL_dmean2Ds, dL_dconics, rwArgs.dL_dSplats.opacities, dL_dcolors, rwArgs.dL_dSplats.means, dL_dcov3D,
 	    rwArgs.dL_dSplats.shs, rwArgs.dL_dSplats.scales, rwArgs.dL_dSplats.rotates, false);
 

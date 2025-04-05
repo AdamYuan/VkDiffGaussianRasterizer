@@ -17,11 +17,11 @@
 		} \
 	}
 
-void CuImageWrite::Write(const std::filesystem::path &filename, const float *deviceColors, uint32_t width,
+void CuImageWrite::Write(const std::filesystem::path &filename, const float *devicePixels, uint32_t width,
                          uint32_t height) {
 	uint32_t pixelCount = width * height;
 	std::vector<float> colors(3 * pixelCount);
-	cudaMemcpy(colors.data(), deviceColors, colors.size() * sizeof(float), cudaMemcpyDeviceToHost);
+	cudaMemcpy(colors.data(), devicePixels, colors.size() * sizeof(float), cudaMemcpyDeviceToHost);
 	cudaCheckError();
 
 	const auto float2byte = [](float x) {
