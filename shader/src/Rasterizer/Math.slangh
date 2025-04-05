@@ -189,6 +189,7 @@ float quadPos2alpha(float2 quadPos, float opacity) {
 [noinline]
 [Differentiable]
 float splatViewGeom2alpha(SplatViewGeom splatViewGeom, no_diff float2 fragCoord, no_diff Camera camera) {
+	fragCoord -= float2(camera.resolution) * 0.5;
 	float2 x2D = fragCoord - splatViewGeom.mean2D;
 
 	float power = -0.5 * (splatViewGeom.conic.x * x2D.x * x2D.x + splatViewGeom.conic.z * x2D.y * x2D.y) //
