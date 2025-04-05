@@ -636,7 +636,6 @@ const Rasterizer::FwdRWArgsSyncState &Rasterizer::GetDstFwdRWArgsSync() {
 	return kSync;
 }
 const Rasterizer::FwdROArgsSyncState &Rasterizer::GetFwdROArgsSync() {
-
 	static constexpr FwdROArgsSyncState kSync = {
 	    .splatBuffers = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT},
 	    // Opacity buffer is additionally read in Geometry Shader (as SplatView.opacity)
@@ -650,6 +649,34 @@ const Rasterizer::FwdArgsUsage &Rasterizer::GetFwdArgsUsage() {
 	    .splatBuffers = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 	    .outColorBuffer = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 	    .outColorImage = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+	};
+	return kUsage;
+}
+
+const Rasterizer::BwdRWArgsSyncState &Rasterizer::GetSrcBwdRWArgsSync() {
+	static constexpr BwdRWArgsSyncState kSync = {
+	    .dL_dSplatBuffers = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	};
+	return kSync;
+}
+const Rasterizer::BwdRWArgsSyncState &Rasterizer::GetDstBwdRWArgsSync() {
+	static constexpr BwdRWArgsSyncState kSync = {
+	    .dL_dSplatBuffers = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	};
+	return kSync;
+}
+const Rasterizer::BwdROArgsSyncState &Rasterizer::GetBwdROArgsSync() {
+	static BwdROArgsSyncState kSync = {
+	    .fwd = GetFwdROArgsSync(),
+	    .dL_dColorBuffer = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT},
+	};
+	return kSync;
+}
+const Rasterizer::BwdArgsUsage &Rasterizer::GetBwdArgsUsage() {
+	static BwdArgsUsage kUsage = {
+	    .fwd = GetFwdArgsUsage(),
+	    .dL_dColorBuffer = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+	    .dL_dSplatBuffers = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 	};
 	return kUsage;
 }

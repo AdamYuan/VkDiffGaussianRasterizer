@@ -70,9 +70,22 @@ public:
 		FwdROArgs fwd;
 		myvk::Ptr<myvk::BufferBase> pdL_dColorBuffer;
 	};
+	struct BwdROArgsSyncState {
+		FwdROArgsSyncState fwd;
+		myvk::BufferSyncState dL_dColorBuffer;
+	};
 
 	struct BwdRWArgs {
 		SplatArgs dL_dSplats{};
+	};
+	struct BwdRWArgsSyncState {
+		myvk::BufferSyncState dL_dSplatBuffers;
+	};
+
+	struct BwdArgsUsage {
+		FwdArgsUsage fwd;
+		VkBufferUsageFlags dL_dColorBuffer;
+		VkBufferUsageFlags dL_dSplatBuffers;
 	};
 
 	struct Resource {
@@ -161,11 +174,18 @@ public:
 
 	void CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const FwdROArgs &roArgs,
 	                const FwdRWArgs &rwArgs, const Resource &resource, const PerfQuery &perfQuery = {}) const;
+	void CmdBackward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const BwdROArgs &roArgs,
+	                 const BwdRWArgs &rwArgs, const Resource &resource, const PerfQuery &perfQuery = {}) const;
 
 	static const FwdRWArgsSyncState &GetSrcFwdRWArgsSync();
 	static const FwdRWArgsSyncState &GetDstFwdRWArgsSync();
 	static const FwdROArgsSyncState &GetFwdROArgsSync();
 	static const FwdArgsUsage &GetFwdArgsUsage();
+
+	static const BwdRWArgsSyncState &GetSrcBwdRWArgsSync();
+	static const BwdRWArgsSyncState &GetDstBwdRWArgsSync();
+	static const BwdROArgsSyncState &GetBwdROArgsSync();
+	static const BwdArgsUsage &GetBwdArgsUsage();
 };
 
 } // namespace vkgsraster
