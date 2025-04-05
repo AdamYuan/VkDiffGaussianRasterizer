@@ -209,6 +209,48 @@ void clearDL_DSplatView(uint sortIdx) {
 }
 #endif
 
+// DL_DSplatView AtomicAdd
+#ifdef RASTERIZER_ATOMICADD_DL_DSPLAT_VIEW
+#extension GL_EXT_shader_atomic_float : require
+layout(std430, binding = SBUF_DL_DCOLORS_MEAN2DXS_BINDING) buffer bDL_DColors_Mean2DXs { vec4 gDL_DColors_Mean2DXs[]; };
+layout(std430, binding = SBUF_DL_DCONICS_MEAN2DYS_BINDING) buffer bDL_DConics_Mean2DYs { vec4 gDL_DConics_Mean2DYs[]; };
+layout(std430, binding = SBUF_DL_DVIEW_OPACITIES_BINDING) buffer bDL_DViewOpacities { float gDL_DViewOpacities[]; };
+void atomicAddDL_DSplatView(uint sortIdx, SplatView dL_dSplatView) {
+	atomicAdd(gDL_DColors_Mean2DXs[sortIdx].x, dL_dSplatView.color.x);
+	atomicAdd(gDL_DColors_Mean2DXs[sortIdx].y, dL_dSplatView.color.y);
+	atomicAdd(gDL_DColors_Mean2DXs[sortIdx].z, dL_dSplatView.color.z);
+	atomicAdd(gDL_DColors_Mean2DXs[sortIdx].w, dL_dSplatView.geom.mean2D.x);
+	atomicAdd(gDL_DConics_Mean2DYs[sortIdx].x, dL_dSplatView.geom.conic.x);
+	atomicAdd(gDL_DConics_Mean2DYs[sortIdx].y, dL_dSplatView.geom.conic.y);
+	atomicAdd(gDL_DConics_Mean2DYs[sortIdx].z, dL_dSplatView.geom.conic.z);
+	atomicAdd(gDL_DConics_Mean2DYs[sortIdx].w, dL_dSplatView.geom.mean2D.y);
+	atomicAdd(gDL_DViewOpacities[sortIdx], dL_dSplatView.geom.opacity);
+}
+#endif
+
+#ifdef RASTERIZER_REDUCE_DL_DSPLAT_VIEW
+#extension GL_KHR_shader_subgroup_arithmetic : require
+#extension GL_KHR_shader_subgroup_quad : require
+SplatView subgroupReduceDL_DSplatView(SplatView dL_dSplatView) {
+	dL_dSplatView.geom.conic = subgroupAdd(dL_dSplatView.geom.conic);
+	dL_dSplatView.geom.mean2D = subgroupAdd(dL_dSplatView.geom.mean2D);
+	dL_dSplatView.geom.opacity = subgroupAdd(dL_dSplatView.geom.opacity);
+	dL_dSplatView.color = subgroupAdd(dL_dSplatView.color);
+	return dL_dSplatView;
+}
+SplatView quadReduceDL_DSplatView(SplatView dL_dSplatView) {
+	dL_dSplatView.geom.conic += subgroupQuadSwapHorizontal(dL_dSplatView.geom.conic);
+	dL_dSplatView.geom.conic += subgroupQuadSwapVertical(dL_dSplatView.geom.conic);
+	dL_dSplatView.geom.mean2D += subgroupQuadSwapHorizontal(dL_dSplatView.geom.mean2D);
+	dL_dSplatView.geom.mean2D += subgroupQuadSwapVertical(dL_dSplatView.geom.mean2D);
+	dL_dSplatView.geom.opacity += subgroupQuadSwapHorizontal(dL_dSplatView.geom.opacity);
+	dL_dSplatView.geom.opacity += subgroupQuadSwapVertical(dL_dSplatView.geom.opacity);
+	dL_dSplatView.color += subgroupQuadSwapHorizontal(dL_dSplatView.color);
+	dL_dSplatView.color += subgroupQuadSwapVertical(dL_dSplatView.color);
+	return dL_dSplatView;
+}
+#endif
+
 #ifdef RASTERIZER_THREAD_GROUP_TILING_X
 /*
  * Copyright (c) 2020-2024, NVIDIA CORPORATION. All rights reserved.
