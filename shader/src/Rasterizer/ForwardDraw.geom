@@ -4,6 +4,8 @@
 #define RASTERIZER_LOAD_SPLAT_QUAD
 #include "Common.glsl"
 
+// #define DEBUG_SUBGROUP
+
 layout(points) in;
 layout(triangle_strip, max_vertices = 4) out;
 
@@ -14,6 +16,9 @@ out bOut {
 	layout(location = 0) flat float opacity;
 	layout(location = 1) flat vec3 color;
 	layout(location = 2) noperspective vec2 quadPos;
+#ifdef DEBUG_SUBGROUP
+	layout(location = 3) flat uint sortIdx;
+#endif
 }
 gOut;
 
@@ -34,24 +39,36 @@ void main() {
 	gOut.opacity = splatView.geom.opacity;
 	gOut.color = splatView.color;
 	gOut.quadPos = vec2(-quadBound, -quadBound);
+#ifdef DEBUG_SUBGROUP
+	gOut.sortIdx = sortIdx;
+#endif
 	gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, 0, 1);
 	EmitVertex();
 
 	gOut.opacity = splatView.geom.opacity;
 	gOut.color = splatView.color;
 	gOut.quadPos = vec2(quadBound, -quadBound);
+#ifdef DEBUG_SUBGROUP
+	gOut.sortIdx = sortIdx;
+#endif
 	gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, 0, 1);
 	EmitVertex();
 
 	gOut.opacity = splatView.geom.opacity;
 	gOut.color = splatView.color;
 	gOut.quadPos = vec2(-quadBound, quadBound);
+#ifdef DEBUG_SUBGROUP
+	gOut.sortIdx = sortIdx;
+#endif
 	gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, 0, 1);
 	EmitVertex();
 
 	gOut.opacity = splatView.geom.opacity;
 	gOut.color = splatView.color;
 	gOut.quadPos = vec2(quadBound, quadBound);
+#ifdef DEBUG_SUBGROUP
+	gOut.sortIdx = sortIdx;
+#endif
 	gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, 0, 1);
 	EmitVertex();
 

@@ -1,12 +1,21 @@
 #version 460
 #extension GL_ARB_fragment_shader_interlock : require
 
+// #define DEBUG_SUBGROUP
+
+#ifdef DEBUG_SUBGROUP
+#extension GL_KHR_shader_subgroup_vote : require
+#endif
+
 #include "Common.glsl"
 
 in bIn {
 	layout(location = 0) flat float opacity;
 	layout(location = 1) flat vec3 color;
 	layout(location = 2) noperspective vec2 quadPos;
+#ifdef DEBUG_SUBGROUP
+	layout(location = 3) flat uint sortIdx;
+#endif
 }
 gIn;
 
@@ -16,6 +25,10 @@ layout(pixel_interlock_ordered) in;
 
 void main() {
 	float alpha = quadPos2alpha(gIn.quadPos, gIn.opacity);
+#ifdef DEBUG_SUBGROUP
+	if (subgroupAllEqual(gIn.sortIdx))
+		alpha = 0;
+#endif
 	if (alpha < ALPHA_MIN)
 		discard;
 
