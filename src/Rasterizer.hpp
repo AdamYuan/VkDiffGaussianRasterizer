@@ -18,7 +18,6 @@ class Rasterizer {
 public:
 	struct Config {
 		bool forwardOutputImage = false;
-		bool performanceMetrics = false;
 	};
 
 	struct CameraArgs {
