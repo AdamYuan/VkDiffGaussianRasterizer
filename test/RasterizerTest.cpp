@@ -58,21 +58,21 @@ int main() {
 
 	auto pFrameManager =
 	    myvk::FrameManager::Create(pGenericQueue, pPresentQueue, false, kFrameCount,
-	                               VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | Rasterizer::GetFwdArgsUsage().outColorImage);
+	                               VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | Rasterizer::GetFwdArgsUsage().outPixelImage);
 
 	auto pRenderPass = myvk::RenderPass::Create(pDevice, [&] {
 		myvk::RenderPassState2 state;
 		state.SetAttachmentCount(1)
 		    .SetAttachment(
 		        0, pFrameManager->GetSwapchain()->GetImageFormat(),
-		        {.op = VK_ATTACHMENT_LOAD_OP_LOAD, .layout = Rasterizer::GetDstFwdRWArgsSync().outColorImage.layout},
+		        {.op = VK_ATTACHMENT_LOAD_OP_LOAD, .layout = Rasterizer::GetDstFwdRWArgsSync().outPixelImage.layout},
 		        {.op = VK_ATTACHMENT_STORE_OP_STORE, .layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR})
 		    .SetSubpassCount(1)
 		    .SetSubpass(
 		        0, {.color_attachment_refs = {{.attachment = 0, .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}}})
 		    .SetDependencyCount(1)
 		    .SetSrcExternalDependency(
-		        0, myvk::SyncStateCast<myvk::MemorySyncState>(Rasterizer::GetDstFwdRWArgsSync().outColorImage),
+		        0, myvk::SyncStateCast<myvk::MemorySyncState>(Rasterizer::GetDstFwdRWArgsSync().outPixelImage),
 		        {.subpass = 0,
 		         .sync = myvk::GetAttachmentLoadOpSync(VK_IMAGE_ASPECT_COLOR_BIT, VK_ATTACHMENT_LOAD_OP_LOAD)});
 		return state;
@@ -91,8 +91,8 @@ int main() {
 	Rasterizer rasterizer{pDevice, {.forwardOutputImage = forwardOutputImage}};
 	Rasterizer::Resource rasterizerResource;
 	rasterizerResource.UpdateImage(pDevice, kWidth, kHeight, rasterizer);
-	auto pColorBuffer = myvk::Buffer::Create(pDevice, sizeof(float) * 3 * kWidth * kHeight, 0,
-	                                         Rasterizer::GetFwdArgsUsage().outColorBuffer);
+	auto pPixelBuffer = myvk::Buffer::Create(pDevice, sizeof(float) * 3 * kWidth * kHeight, 0,
+	                                         Rasterizer::GetFwdArgsUsage().outPixelBuffer);
 
 	VkGSModel vkGsModel{};
 
@@ -158,15 +158,15 @@ int main() {
 			    {}, {},
 			    {
 			        pSwapchainImage->GetMemoryBarrier2({VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT},
-			                                           Rasterizer::GetSrcFwdRWArgsSync().outColorImage),
+			                                           Rasterizer::GetSrcFwdRWArgsSync().outPixelImage),
 			    });
 
 			if (!vkGsModel.IsEmpty()) {
 				if (!forwardOutputImage)
 					pCommandBuffer->CmdPipelineBarrier2(
 					    {},
-					    {pColorBuffer->GetMemoryBarrier2(Rasterizer::GetDstFwdRWArgsSync().outColorBuffer.GetWrite(),
-					                                     Rasterizer::GetSrcFwdRWArgsSync().outColorBuffer)},
+					    {pPixelBuffer->GetMemoryBarrier2(Rasterizer::GetDstFwdRWArgsSync().outPixelBuffer.GetWrite(),
+					                                     Rasterizer::GetSrcFwdRWArgsSync().outPixelBuffer)},
 					    {});
 
 				rasterizer.CmdForward(pCommandBuffer,
@@ -185,8 +185,8 @@ int main() {
 				                          .bgColor = {1.0f, 1.0f, 1.0f},
 				                      },
 				                      {
-				                          .pOutColorBuffer = pColorBuffer,
-				                          .pOutColorImage = pSwapchainImage,
+				                          .pOutPixelBuffer = pPixelBuffer,
+				                          .pOutPixelImage = pSwapchainImage,
 				                      },
 				                      rasterizerResource, rasterizerPerfQuery);
 			}

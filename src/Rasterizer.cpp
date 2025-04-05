@@ -390,7 +390,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 		descriptorSetWrites.push_back(
 		    myvk::DescriptorSetWrite::WriteSampledImage(nullptr, resource.pImageView0, TEX_IMAGE0_BINDING));
 		descriptorSetWrites.push_back(
-		    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, rwArgs.pOutColorBuffer, SBUF_PIXELS_BINDING));
+		    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, rwArgs.pOutPixelBuffer, SBUF_PIXELS_BINDING));
 	}
 
 	PushConstantData pcData = {
@@ -589,7 +589,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 		                                                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 		                                            }),
 		                                    });
-		pCommandBuffer->CmdBlitImage(resource.pImage0, rwArgs.pOutColorImage,
+		pCommandBuffer->CmdBlitImage(resource.pImage0, rwArgs.pOutPixelImage,
 		                             {
 		                                 .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
 		                                 .srcOffsets = {{}, {(int)roArgs.camera.width, (int)roArgs.camera.height, 1u}},
@@ -620,8 +620,8 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 
 const Rasterizer::FwdRWArgsSyncState &Rasterizer::GetSrcFwdRWArgsSync() {
 	static constexpr FwdRWArgsSyncState kSync = {
-	    .outColorBuffer = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
-	    .outColorImage = {VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+	    .outPixelBuffer = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	    .outPixelImage = {VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
 	                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
 	};
 	return kSync;
@@ -629,8 +629,8 @@ const Rasterizer::FwdRWArgsSyncState &Rasterizer::GetSrcFwdRWArgsSync() {
 const Rasterizer::FwdRWArgsSyncState &Rasterizer::GetDstFwdRWArgsSync() {
 	// Identical to GetSrcFwdRWArgsSync
 	static constexpr FwdRWArgsSyncState kSync = {
-	    .outColorBuffer = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
-	    .outColorImage = {VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+	    .outPixelBuffer = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	    .outPixelImage = {VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
 	                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
 	};
 	return kSync;
@@ -647,8 +647,8 @@ const Rasterizer::FwdROArgsSyncState &Rasterizer::GetFwdROArgsSync() {
 const Rasterizer::FwdArgsUsage &Rasterizer::GetFwdArgsUsage() {
 	static constexpr FwdArgsUsage kUsage = {
 	    .splatBuffers = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-	    .outColorBuffer = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-	    .outColorImage = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+	    .outPixelBuffer = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+	    .outPixelImage = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
 	};
 	return kUsage;
 }
@@ -668,14 +668,14 @@ const Rasterizer::BwdRWArgsSyncState &Rasterizer::GetDstBwdRWArgsSync() {
 const Rasterizer::BwdROArgsSyncState &Rasterizer::GetBwdROArgsSync() {
 	static BwdROArgsSyncState kSync = {
 	    .fwd = GetFwdROArgsSync(),
-	    .dL_dColorBuffer = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT},
+	    .dL_dPixelBuffer = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT},
 	};
 	return kSync;
 }
 const Rasterizer::BwdArgsUsage &Rasterizer::GetBwdArgsUsage() {
 	static BwdArgsUsage kUsage = {
 	    .fwd = GetFwdArgsUsage(),
-	    .dL_dColorBuffer = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+	    .dL_dPixelBuffer = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 	    .dL_dSplatBuffers = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 	};
 	return kUsage;

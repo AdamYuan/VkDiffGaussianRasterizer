@@ -52,27 +52,27 @@ public:
 	};
 
 	struct FwdRWArgs {
-		myvk::Ptr<myvk::BufferBase> pOutColorBuffer;
-		myvk::Ptr<myvk::ImageBase> pOutColorImage;
+		myvk::Ptr<myvk::BufferBase> pOutPixelBuffer;
+		myvk::Ptr<myvk::ImageBase> pOutPixelImage;
 	};
 	struct FwdRWArgsSyncState {
-		myvk::BufferSyncState outColorBuffer;
-		myvk::ImageSyncState outColorImage;
+		myvk::BufferSyncState outPixelBuffer;
+		myvk::ImageSyncState outPixelImage;
 	};
 
 	struct FwdArgsUsage {
 		VkBufferUsageFlags splatBuffers;
-		VkBufferUsageFlags outColorBuffer;
-		VkImageUsageFlags outColorImage;
+		VkBufferUsageFlags outPixelBuffer;
+		VkImageUsageFlags outPixelImage;
 	};
 
 	struct BwdROArgs {
 		FwdROArgs fwd;
-		myvk::Ptr<myvk::BufferBase> pdL_dColorBuffer;
+		myvk::Ptr<myvk::BufferBase> pdL_dPixelBuffer;
 	};
 	struct BwdROArgsSyncState {
 		FwdROArgsSyncState fwd;
-		myvk::BufferSyncState dL_dColorBuffer;
+		myvk::BufferSyncState dL_dPixelBuffer;
 	};
 
 	struct BwdRWArgs {
@@ -84,7 +84,7 @@ public:
 
 	struct BwdArgsUsage {
 		FwdArgsUsage fwd;
-		VkBufferUsageFlags dL_dColorBuffer;
+		VkBufferUsageFlags dL_dPixelBuffer;
 		VkBufferUsageFlags dL_dSplatBuffers;
 	};
 

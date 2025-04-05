@@ -151,13 +151,13 @@ void CuTileRasterizer::FwdROArgs::Update(const vkgsraster::Rasterizer::FwdROArgs
 }
 
 void CuTileRasterizer::FwdRWArgs::Update(const vkgsraster::Rasterizer::FwdRWArgs &vkRWArgs) {
-	outColors = std::static_pointer_cast<VkCuBuffer>(vkRWArgs.pOutColorBuffer)->GetCudaMappedPtr<float>();
+	outColors = std::static_pointer_cast<VkCuBuffer>(vkRWArgs.pOutPixelBuffer)->GetCudaMappedPtr<float>();
 }
 
 void CuTileRasterizer::BwdROArgs::Update(const FwdROArgs &fwdROArgs,
                                          const vkgsraster::Rasterizer::BwdROArgs &vkROArgs) {
 	fwd = fwdROArgs;
-	dL_dColors = std::static_pointer_cast<VkCuBuffer>(vkROArgs.pdL_dColorBuffer)->GetCudaMappedPtr<float>();
+	dL_dColors = std::static_pointer_cast<VkCuBuffer>(vkROArgs.pdL_dPixelBuffer)->GetCudaMappedPtr<float>();
 }
 
 void CuTileRasterizer::BwdRWArgs::Update(const vkgsraster::Rasterizer::BwdRWArgs &vkRWArgs) {

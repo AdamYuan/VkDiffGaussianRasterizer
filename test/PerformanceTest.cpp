@@ -102,15 +102,15 @@ int main(int argc, char **argv) {
 		vkRasterPerfQuery.Reset();
 		vkRasterResource.UpdateImage(pDevice, entry.camera.width, entry.camera.height, vkRasterizer);
 		vkRasterFwdROArgs.camera = entry.camera;
-		std::size_t colorBufferSize = 3 * entry.camera.width * entry.camera.height * sizeof(float);
-		if (!vkRasterFwdRWArgs.pOutColorBuffer || vkRasterFwdRWArgs.pOutColorBuffer->GetSize() < colorBufferSize) {
-			vkRasterFwdRWArgs.pOutColorBuffer =
-			    VkCuBuffer::Create(pDevice, colorBufferSize, vkgsraster::Rasterizer::GetFwdArgsUsage().outColorBuffer,
+		std::size_t pixelBufferSize = 3 * entry.camera.width * entry.camera.height * sizeof(float);
+		if (!vkRasterFwdRWArgs.pOutPixelBuffer || vkRasterFwdRWArgs.pOutPixelBuffer->GetSize() < pixelBufferSize) {
+			vkRasterFwdRWArgs.pOutPixelBuffer =
+			    VkCuBuffer::Create(pDevice, pixelBufferSize, vkgsraster::Rasterizer::GetFwdArgsUsage().outPixelBuffer,
 			                       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 		}
-		if (!vkRasterBwdROArgs.pdL_dColorBuffer || vkRasterBwdROArgs.pdL_dColorBuffer->GetSize() < colorBufferSize) {
-			vkRasterBwdROArgs.pdL_dColorBuffer =
-			    VkCuBuffer::Create(pDevice, colorBufferSize, 0 /* TODO */, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		if (!vkRasterBwdROArgs.pdL_dPixelBuffer || vkRasterBwdROArgs.pdL_dPixelBuffer->GetSize() < pixelBufferSize) {
+			vkRasterBwdROArgs.pdL_dPixelBuffer =
+			    VkCuBuffer::Create(pDevice, pixelBufferSize, 0 /* TODO */, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 		}
 
 		cuTileRasterFwdROArgs.Update(vkRasterFwdROArgs);
