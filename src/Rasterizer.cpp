@@ -66,6 +66,7 @@ void Rasterizer::Resource::UpdateImage(const myvk::Ptr<myvk::Device> &pDevice, u
 		pImageView1 = myvk::ImageView::Create(pImage1, VK_IMAGE_VIEW_TYPE_2D);
 
 	ResizeFramebuffer(rasterizer.mpForwardRenderPass, {}, pForwardFramebuffer, width, height);
+	ResizeFramebuffer(rasterizer.mpBackwardRenderPass, {pImageView0}, pBackwardFramebuffer, width, height);
 }
 
 Rasterizer::PerfQuery Rasterizer::PerfQuery::Create(const myvk::Ptr<myvk::Device> &pDevice) {
@@ -381,7 +382,6 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 
 	    // Draw Args
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pDrawArgBuffer, SBUF_DRAW_ARGS_BINDING),
-	    // myvk::DescriptorSetWrite::WriteUniformBuffer(nullptr, resource.pDrawArgBuffer, SBUF_SORT_COUNT_BINDING),
 
 	    // Images
 	    myvk::DescriptorSetWrite::WriteStorageImage(nullptr, resource.pImageView0, SIMG_IMAGE0_BINDING),
@@ -408,7 +408,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	    mpPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, //
 	    0, sizeof(PushConstantData), &pcData);
 
-	// Reset
+	// ForwardReset
 	pCommandBuffer->CmdPipelineBarrier2(
 	    {},
 	    {
@@ -426,7 +426,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	pCommandBuffer->CmdDispatch(1, 1, 1);
 	perfQuery.CmdWriteTimestamp(pCommandBuffer, PerfQuery::Timestamp::kForward);
 
-	// View
+	// ForwardView
 	pCommandBuffer->CmdPipelineBarrier2(
 	    {},
 	    {
@@ -531,20 +531,23 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	    },
 	    {});
 
-	// Clear Color Image
+	// Clear Image0
 	pCommandBuffer->CmdPipelineBarrier2(
 	    {}, {},
 	    {
 	        resource.pImage0->GetMemoryBarrier2(
 	            {
-	                mConfig.forwardOutputImage ? VK_PIPELINE_STAGE_2_BLIT_BIT : VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+	                // Last Read in Forward (CmdBlit or ForwardCopy)
+	                (mConfig.forwardOutputImage ? VK_PIPELINE_STAGE_2_BLIT_BIT : VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+	                    // Last Read in Backward (BackwardDraw)
+	                    | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
 	            },
 	            {VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL}),
 	    });
 	pCommandBuffer->CmdClearColorImage(resource.pImage0, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 	                                   {roArgs.bgColor[0], roArgs.bgColor[1], roArgs.bgColor[2], 1.0f});
 
-	// Draw
+	// ForwardDraw
 	pCommandBuffer->CmdPipelineBarrier2(
 	    {}, {},
 	    {
@@ -616,6 +619,207 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 		pCommandBuffer->CmdDispatch((roArgs.camera.width + FORWARD_COPY_DIM_X - 1) / FORWARD_COPY_DIM_X,
 		                            (roArgs.camera.height + FORWARD_COPY_DIM_Y - 1) / FORWARD_COPY_DIM_Y, 1u);
 	}
+}
+
+void Rasterizer::CmdBackward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const BwdROArgs &roArgs,
+                             const BwdRWArgs &rwArgs, const Resource &resource, const PerfQuery &perfQuery) const {
+	std::vector descriptorSetWrites = {
+	    // Splats
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.fwd.splats.pMeanBuffer, SBUF_MEANS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.fwd.splats.pScaleBuffer, SBUF_SCALES_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.fwd.splats.pRotateBuffer, SBUF_ROTATES_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.fwd.splats.pOpacityBuffer, SBUF_OPACITIES_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.fwd.splats.pSHBuffer, SBUF_SHS_BINDING),
+
+	    // Sort Buffers
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pSortPayloadBuffer, SBUF_SORT_PAYLOADS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pSortSplatIndexBuffer,
+	                                                 SBUF_SORT_SPLAT_INDICES_BINDING),
+
+	    // SplatViews
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pColorMean2DXBuffer,
+	                                                 SBUF_COLORS_MEAN2DXS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pConicMean2DYBuffer,
+	                                                 SBUF_CONICS_MEAN2DYS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pViewOpacityBuffer, SBUF_VIEW_OPACITIES_BINDING),
+
+	    // SplatQuads
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pQuadBuffer, SBUF_QUADS_BINDING),
+
+	    // Draw & Dispatch Args
+	    myvk::DescriptorSetWrite::WriteUniformBuffer(nullptr, resource.pDrawArgBuffer, UBUF_SORT_COUNT_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pDispatchArgBuffer, SBUF_DISPATCH_ARGS_BINDING),
+
+	    // Images
+	    myvk::DescriptorSetWrite::WriteStorageImage(nullptr, resource.pImageView0, SIMG_IMAGE0_BINDING),
+	    myvk::DescriptorSetWrite::WriteInputAttachment(nullptr, resource.pImageView0, IATT_IMAGE0_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.pdL_dPixelBuffer, SBUF_PIXELS_BINDING),
+
+	    // DL_DSplats
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, rwArgs.dL_dSplats.pMeanBuffer, SBUF_DL_DMEANS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, rwArgs.dL_dSplats.pScaleBuffer, SBUF_DL_DSCALES_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, rwArgs.dL_dSplats.pRotateBuffer,
+	                                                 SBUF_DL_DROTATES_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, rwArgs.dL_dSplats.pOpacityBuffer,
+	                                                 SBUF_DL_DOPACITIES_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, rwArgs.dL_dSplats.pSHBuffer, SBUF_DL_DSHS_BINDING),
+
+	    // DL_DSplatViews
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pDL_DColorMean2DXBuffer,
+	                                                 SBUF_DL_DCOLORS_MEAN2DXS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pDL_DConicMean2DYBuffer,
+	                                                 SBUF_DL_DCONICS_MEAN2DYS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pDL_DViewOpacityBuffer,
+	                                                 SBUF_DL_DVIEW_OPACITIES_BINDING),
+	};
+
+	PushConstantData pcData = {
+	    .bgColor = roArgs.fwd.bgColor,
+	    .splatCount = roArgs.fwd.splatCount,
+	    .camFocal = {roArgs.fwd.camera.focalX, roArgs.fwd.camera.focalY},
+	    .camResolution = {roArgs.fwd.camera.width, roArgs.fwd.camera.height},
+	    .camPos = roArgs.fwd.camera.pos,
+	    .camViewMat = roArgs.fwd.camera.viewMat,
+	};
+
+	// Descriptors and Push Constants
+	pCommandBuffer->CmdPushDescriptorSet(mpPipelineLayout, VK_PIPELINE_BIND_POINT_COMPUTE, 0, descriptorSetWrites);
+	pCommandBuffer->CmdPushConstants(
+	    mpPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, //
+	    0, sizeof(PushConstantData), &pcData);
+
+	// BackwardCopy
+	pCommandBuffer->CmdPipelineBarrier2(
+	    {}, {},
+	    {
+	        resource.pImage0->GetMemoryBarrier2(
+	            {
+	                // CmdBlit or ForwardCopy
+	                mConfig.forwardOutputImage ? VK_PIPELINE_STAGE_2_BLIT_BIT : VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+	                0,
+	                mConfig.forwardOutputImage ? VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+	                                           : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+	            },
+	            {
+	                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+	                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+	                VK_IMAGE_LAYOUT_GENERAL,
+	            }),
+	    });
+	pCommandBuffer->CmdBindPipeline(mpBackwardCopyPipeline);
+	pCommandBuffer->CmdDispatch(BACKWARD_COPY_DIM_X, BACKWARD_COPY_DIM_Y, 1);
+	pCommandBuffer->CmdPushDescriptorSet(
+	    mpPipelineLayout, VK_PIPELINE_BIND_POINT_COMPUTE, 0,
+	    {
+	        myvk::DescriptorSetWrite::WriteStorageImage(nullptr, resource.pImageView1, SIMG_IMAGE0_BINDING),
+	    }); // Now switch storage image slot to image1
+
+	// BackwardReset
+	pCommandBuffer->CmdPipelineBarrier2(
+	    {},
+	    {
+	        resource.pDispatchArgBuffer->GetMemoryBarrier2(
+	            // VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT read (BackwardView)
+	            {VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT, 0},
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
+
+	        // DL_DSplatViews
+	        // VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT read (BackwardView)
+	        resource.pDL_DColorMean2DXBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, 0},
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
+	        resource.pDL_DConicMean2DYBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, 0},
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
+	        resource.pDL_DViewOpacityBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, 0},
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
+	    },
+	    {});
+	pCommandBuffer->CmdBindPipeline(mpBackwardResetPipeline);
+	pCommandBuffer->CmdDispatch(BACKWARD_RESET_GROUP_COUNT, 1, 1);
+
+	// Clear Image1
+	pCommandBuffer->CmdPipelineBarrier2(
+	    {}, {},
+	    {
+	        resource.pImage1->GetMemoryBarrier2(
+	            // VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT read/write (BackwardDraw)
+	            {VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	            {VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL}),
+	    });
+	pCommandBuffer->CmdClearColorImage(resource.pImage1, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+	                                   {0.0f, 0.0f, 0.0f, 1.0f});
+
+	// BackwardDraw
+	pCommandBuffer->CmdPipelineBarrier2(
+	    {},
+	    {
+	        // DL_DSplatViews
+	        // VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT write (BackwardReset)
+	        resource.pDL_DColorMean2DXBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	            {VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+	             VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
+	        resource.pDL_DConicMean2DYBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	            {VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+	             VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
+	        resource.pDL_DViewOpacityBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	            {VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+	             VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
+	    },
+	    {
+	        // Barrier for image0 is in SubpassDependency0
+
+	        resource.pImage1->GetMemoryBarrier2(
+	            // VK_PIPELINE_STAGE_2_CLEAR_BIT write
+	            {VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
+	            {VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+	             VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL}),
+	    });
+	pCommandBuffer->CmdBeginRenderPass(mpBackwardRenderPass, resource.pBackwardFramebuffer, {});
+	pCommandBuffer->CmdBindPipeline(mpBackwardDrawPipeline);
+	pCommandBuffer->CmdSetViewport({VkViewport{
+	    .x = 0,
+	    .y = 0,
+	    .width = (float)roArgs.fwd.camera.width,
+	    .height = (float)roArgs.fwd.camera.height,
+	    .minDepth = 0,
+	    .maxDepth = 0,
+	}});
+	pCommandBuffer->CmdSetScissor({VkRect2D{
+	    .offset = {},
+	    .extent = {.width = roArgs.fwd.camera.width, .height = roArgs.fwd.camera.height},
+	}});
+	pCommandBuffer->CmdDrawIndirect(resource.pDrawArgBuffer, 0, 1);
+	pCommandBuffer->CmdEndRenderPass();
+
+	// BackwardView
+	pCommandBuffer->CmdPipelineBarrier2(
+	    {},
+	    {
+	        resource.pDispatchArgBuffer->GetMemoryBarrier2(
+	            // VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT write (BackwardReset)
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	            {VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT, VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT}),
+
+	        // DL_DSplatViews
+	        // VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT write (BackwardDraw)
+	        resource.pDL_DColorMean2DXBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
+	        resource.pDL_DConicMean2DYBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
+	        resource.pDL_DViewOpacityBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
+	    },
+	    {});
+	pCommandBuffer->CmdBindPipeline(mpBackwardViewPipeline);
+	pCommandBuffer->CmdDispatchIndirect(resource.pDispatchArgBuffer);
 }
 
 const Rasterizer::FwdRWArgsSyncState &Rasterizer::GetSrcFwdRWArgsSync() {
