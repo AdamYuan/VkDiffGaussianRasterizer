@@ -172,10 +172,9 @@ struct VGroupThreadID {
 };
 
 // User parameter (N). Recommended values: 8, 16 or 32.
-VGroupThreadID ThreadGroupTilingX(uint maxTileWidth) {
+VGroupThreadID ThreadGroupTilingX(uvec2 ctaDim, uint maxTileWidth) {
 	const uvec2 dispatchGridDim =
-	    gl_NumWorkGroups.xy;          // Arguments of the Dispatch call (typically from a ConstantBuffer)
-	const uvec2 ctaDim = uvec2(8, 8); // Already known in HLSL, eg:[numthreads(8, 8, 1)] -> uint2(8, 8)
+	    gl_NumWorkGroups.xy; // Arguments of the Dispatch call (typically from a ConstantBuffer)
 	const uvec2 groupThreadID = gl_LocalInvocationID.xy; // SV_GroupThreadID
 	const uvec2 groupId = gl_WorkGroupID.xy;             // SV_GroupID
 	// A perfect tile is one with dimensions = [maxTileWidth, dispatchGridDim.y]
