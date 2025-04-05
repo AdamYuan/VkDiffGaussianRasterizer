@@ -94,10 +94,10 @@ public:
 		myvk::Ptr<myvk::BufferBase> pDrawArgBuffer;     // uint4
 		myvk::Ptr<myvk::BufferBase> pDispatchArgBuffer; // uint3
 
-		myvk::Ptr<myvk::ImageBase> pColorImage; // W * H * [float4]
-		myvk::Ptr<myvk::ImageView> pColorImageView;
+		myvk::Ptr<myvk::ImageBase> pImage0, pImage1; // W * H * [float4]
+		myvk::Ptr<myvk::ImageView> pImageView0, pImageView1;
 
-		myvk::Ptr<myvk::Framebuffer> pForwardFramebuffer;
+		myvk::Ptr<myvk::Framebuffer> pForwardFramebuffer, pBackwardFramebuffer;
 
 		void UpdateBuffer(const myvk::Ptr<myvk::Device> &pDevice, uint32_t splatCount, double growFactor = 1.5);
 		void UpdateImage(const myvk::Ptr<myvk::Device> &pDevice, uint32_t width, uint32_t height,
@@ -131,9 +131,14 @@ private:
 	DeviceSorter mSorter;
 
 	myvk::Ptr<myvk::PipelineLayout> mpPipelineLayout;
+
 	myvk::Ptr<myvk::ComputePipeline> mpForwardResetPipeline, mpForwardViewPipeline, mpForwardCopyPipeline;
 	myvk::Ptr<myvk::GraphicsPipeline> mpForwardDrawPipeline;
 	myvk::Ptr<myvk::RenderPass> mpForwardRenderPass;
+
+	myvk::Ptr<myvk::ComputePipeline> mpBackwardResetPipeline, mpBackwardViewPipeline, mpBackwardCopyPipeline;
+	myvk::Ptr<myvk::GraphicsPipeline> mpBackwardDrawPipeline;
+	myvk::Ptr<myvk::RenderPass> mpBackwardRenderPass;
 
 	static myvk::Ptr<myvk::ShaderModule> createDrawVertShader(const myvk::Ptr<myvk::Device> &pDevice);
 	static myvk::Ptr<myvk::ShaderModule> createForwardResetShader(const myvk::Ptr<myvk::Device> &pDevice);
@@ -141,6 +146,11 @@ private:
 	static myvk::Ptr<myvk::ShaderModule> createForwardDrawGeomShader(const myvk::Ptr<myvk::Device> &pDevice);
 	static myvk::Ptr<myvk::ShaderModule> createForwardDrawFragShader(const myvk::Ptr<myvk::Device> &pDevice);
 	static myvk::Ptr<myvk::ShaderModule> createForwardCopyShader(const myvk::Ptr<myvk::Device> &pDevice);
+	static myvk::Ptr<myvk::ShaderModule> createBackwardResetShader(const myvk::Ptr<myvk::Device> &pDevice);
+	static myvk::Ptr<myvk::ShaderModule> createBackwardViewShader(const myvk::Ptr<myvk::Device> &pDevice);
+	static myvk::Ptr<myvk::ShaderModule> createBackwardDrawGeomShader(const myvk::Ptr<myvk::Device> &pDevice);
+	static myvk::Ptr<myvk::ShaderModule> createBackwardDrawFragShader(const myvk::Ptr<myvk::Device> &pDevice);
+	static myvk::Ptr<myvk::ShaderModule> createBackwardCopyShader(const myvk::Ptr<myvk::Device> &pDevice);
 
 public:
 	Rasterizer() = default;
