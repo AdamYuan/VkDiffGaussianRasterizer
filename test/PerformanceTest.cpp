@@ -88,7 +88,9 @@ int main(int argc, char **argv) {
 	    .fwd = vkRasterFwdROArgs,
 	};
 	vkgsraster::Rasterizer::BwdRWArgs vkRasterBwdRWArgs = {
-	    .dL_dSplats = VkGSModel::Create(pDevice, 0 /* TODO */, vkGsModel.splatCount, createVkCuBuffer).GetSplatArgs(),
+	    .dL_dSplats = VkGSModel::Create(pDevice, vkgsraster::Rasterizer::GetBwdArgsUsage().dL_dSplatBuffers,
+	                                    vkGsModel.splatCount, createVkCuBuffer)
+	                      .GetSplatArgs(),
 	};
 
 	CuTileRasterizer::Resource cuTileRasterResource{};
@@ -110,7 +112,8 @@ int main(int argc, char **argv) {
 		}
 		if (!vkRasterBwdROArgs.pdL_dPixelBuffer || vkRasterBwdROArgs.pdL_dPixelBuffer->GetSize() < pixelBufferSize) {
 			vkRasterBwdROArgs.pdL_dPixelBuffer =
-			    VkCuBuffer::Create(pDevice, pixelBufferSize, 0 /* TODO */, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+			    VkCuBuffer::Create(pDevice, pixelBufferSize, vkgsraster::Rasterizer::GetBwdArgsUsage().dL_dPixelBuffer,
+			                       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 		}
 
 		cuTileRasterFwdROArgs.Update(vkRasterFwdROArgs);
