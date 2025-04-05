@@ -1,0 +1,16 @@
+#version 460
+
+#define RASTERIZER_CLEAR_DL_DSPLAT_VIEW
+#include "Common.glsl"
+
+layout(local_size_x = BACKWARD_RESET_DIM, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = SBUF_DISPATCH_ARGS_BINDING) writeonly buffer bDispatchArgs { uvec3 gDispatchArgs[]; };
+
+void main() {
+	if (gl_GlobalInvocationID.x == 0)
+		gDispatchArgs[0] = uvec3((gSplatSortCount + BACKWARD_VIEW_DIM - 1) / BACKWARD_VIEW_DIM, 1, 1);
+
+	for (uint sortIdx = gl_GlobalInvocationID.x; sortIdx < gSplatSortCount; sortIdx += BACKWARD_RESET_THREAD_COUNT)
+		clearDL_DSplatView(sortIdx);
+}

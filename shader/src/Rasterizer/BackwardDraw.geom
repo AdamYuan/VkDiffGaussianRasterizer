@@ -1,0 +1,64 @@
+#version 460
+
+#define RASTERIZER_LOAD_SPLAT_VIEW
+#define RASTERIZER_LOAD_SPLAT_QUAD
+#include "Common.glsl"
+
+layout(points) in;
+layout(triangle_strip, max_vertices = 4) out;
+
+in bIn { layout(location = 0) uint instanceID; }
+gIn[];
+
+out bOut {
+	layout(location = 0) flat vec4 color_mean2Dx;
+	layout(location = 1) flat vec4 conic_mean2Dy;
+	layout(location = 2) flat float opacity;
+	layout(location = 3) noperspective vec2 quadPos;
+}
+gOut;
+
+layout(std430, binding = SBUF_SORT_PAYLOADS_BINDING) readonly buffer bSortPayloads { uint gSortPayloads[]; };
+
+void main() {
+	uint sortIdx = gSortPayloads[gIn[0].instanceID];
+	SplatView splatView = loadSplatView(sortIdx);
+	SplatQuad splatQuad = loadSplatQuad(sortIdx);
+
+	float quadBound = opacity2quadBound(splatView.geom.opacity);
+
+	Camera camera = loadCamera();
+	vec2 meanClip = pos2D2clip(splatView.geom.mean2D, camera);
+	vec2 axisClip1 = axis2D2clip(splatQuad.axis1, camera);
+	vec2 axisClip2 = axis2D2clip(splatQuad.axis2, camera);
+
+	gOut.color_mean2Dx = vec4(splatView.color, splatView.geom.mean2D.x);
+	gOut.conic_mean2Dy = vec4(splatView.geom.conic, splatView.geom.mean2D.y);
+	gOut.opacity = splatView.geom.opacity;
+	gOut.quadPos = vec2(-quadBound, -quadBound);
+	gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, 0, 1);
+	EmitVertex();
+
+	gOut.color_mean2Dx = vec4(splatView.color, splatView.geom.mean2D.x);
+	gOut.conic_mean2Dy = vec4(splatView.geom.conic, splatView.geom.mean2D.y);
+	gOut.opacity = splatView.geom.opacity;
+	gOut.quadPos = vec2(quadBound, -quadBound);
+	gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, 0, 1);
+	EmitVertex();
+
+	gOut.color_mean2Dx = vec4(splatView.color, splatView.geom.mean2D.x);
+	gOut.conic_mean2Dy = vec4(splatView.geom.conic, splatView.geom.mean2D.y);
+	gOut.opacity = splatView.geom.opacity;
+	gOut.quadPos = vec2(-quadBound, quadBound);
+	gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, 0, 1);
+	EmitVertex();
+
+	gOut.color_mean2Dx = vec4(splatView.color, splatView.geom.mean2D.x);
+	gOut.conic_mean2Dy = vec4(splatView.geom.conic, splatView.geom.mean2D.y);
+	gOut.opacity = splatView.geom.opacity;
+	gOut.quadPos = vec2(quadBound, quadBound);
+	gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, 0, 1);
+	EmitVertex();
+
+	EndPrimitive();
+}

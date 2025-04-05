@@ -94,3 +94,8 @@ add_Rasterizer_shader(ForwardDraw.geom ForwardDraw.geom.inl "-g")
 add_Rasterizer_shader(ForwardDraw.frag ForwardDraw.frag.inl "-g")
 add_Rasterizer_shader(ForwardCopy.comp ForwardCopy.comp.inl "-g")
 
+add_Rasterizer_shader(BackwardReset.comp BackwardReset.comp.inl "-O")
+add_Rasterizer_shader(BackwardCopy.comp BackwardCopy.comp.inl "-O")
+
+add_Rasterizer_shader(BackwardView.comp BackwardView.comp.inl "-O")
+

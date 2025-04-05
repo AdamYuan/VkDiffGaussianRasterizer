@@ -1,0 +1,18 @@
+#version 450
+
+#define RASTERIZER_LOAD_PIXEL
+#include "Common.glsl"
+
+layout(local_size_x = BACKWARD_COPY_DIM_X, local_size_y = BACKWARD_COPY_DIM_Y, local_size_z = 1) in;
+
+layout(binding = SIMG_IMAGE0_BINDING, rgba32f) uniform image2D gDLDColors_Ts;
+
+void main() {
+	uvec2 pixelCoord = gl_GlobalInvocationID.xy;
+
+	if (!validPixelCoord(pixelCoord))
+		return;
+	vec3 dL_dPixel = loadPixel(pixelCoord);
+	float T = imageLoad(gDLDColors_Ts, ivec2(pixelCoord)).w;
+	imageStore(gDLDColors_Ts, ivec2(pixelCoord), vec4(dL_dPixel, T));
+}

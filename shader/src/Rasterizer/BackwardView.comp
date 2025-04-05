@@ -1,0 +1,34 @@
+#version 460
+
+#define RASTERIZER_LOAD_SPLAT
+#define RASTERIZER_LOAD_DL_DSPLAT_VIEW
+#define RASTERIZER_STORE_DL_DSPLAT
+#include "Common.glsl"
+
+layout(local_size_x = BACKWARD_VIEW_DIM, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = SBUF_SORT_KEYS_BINDING) writeonly buffer bSortKeys { uint gSortKeys[]; };
+layout(std430, binding = SBUF_SORT_PAYLOADS_BINDING) writeonly buffer bSortPayloads { uint gSortPayloads[]; };
+layout(std430, binding = SBUF_DRAW_ARGS_BINDING) buffer bDrawArgs { uint gDrawArgs[]; };
+
+layout(std430, binding = SBUF_SORT_SPLAT_INDICES_BINDING) readonly buffer bSortSplatIndices {
+	uint gSortSplatIndices[];
+};
+
+void main() {
+	uint sortIdx = gl_GlobalInvocationID.x;
+
+	if (sortIdx >= gSplatSortCount)
+		return;
+
+	Camera camera = loadCamera();
+
+	SplatView dL_dSplatView = loadDL_DSplatView(sortIdx);
+
+	uint splatIdx = gSortSplatIndices[sortIdx];
+	Splat splat = loadSplat(splatIdx);
+
+	Splat dL_dSplat = bwd_splat2splatView(splat, camera, dL_dSplatView);
+
+	storeDL_DSplat(splatIdx, dL_dSplat);
+}

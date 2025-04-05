@@ -199,10 +199,13 @@ layout(std430, binding = SBUF_DL_DCOLORS_MEAN2DXS_BINDING) writeonly buffer bDL_
 layout(std430, binding = SBUF_DL_DCONICS_MEAN2DYS_BINDING) writeonly buffer bDL_DConics_Mean2DYs {
 	vec4 gDL_DConics_Mean2DYs[];
 };
+layout(std430, binding = SBUF_DL_DVIEW_OPACITIES_BINDING) writeonly buffer bDL_DViewOpacities {
+	float gDL_DViewOpacities[];
+};
 void clearDL_DSplatView(uint sortIdx) {
 	gDL_DColors_Mean2DXs[sortIdx] = vec4(0);
 	gDL_DConics_Mean2DYs[sortIdx] = vec4(0);
-	gDL_DOpacities[sortIdx] = 0;
+	gDL_DViewOpacities[sortIdx] = 0;
 }
 #endif
 

@@ -15,6 +15,7 @@ void Rasterizer::Resource::UpdateBuffer(const myvk::Ptr<myvk::Device> &pDevice, 
                                         double growFactor) {
 	sorterResource.Update(pDevice, splatCount, growFactor);
 
+	// Sort Buffers
 	GrowBuffer<sizeof(uint32_t)>(pDevice, pSortKeyBuffer,
 	                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | DeviceSorter::GetArgsUsage().keyBuffer,
 	                             splatCount, growFactor);
@@ -23,18 +24,33 @@ void Rasterizer::Resource::UpdateBuffer(const myvk::Ptr<myvk::Device> &pDevice, 
 	                             splatCount, growFactor);
 	GrowBuffer<sizeof(uint32_t)>(pDevice, pSortSplatIndexBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount,
 	                             growFactor);
+
+	// SplatViews
 	GrowBuffer<sizeof(float) * 4>(pDevice, pColorMean2DXBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount,
 	                              growFactor);
 	GrowBuffer<sizeof(float) * 4>(pDevice, pConicMean2DYBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount,
 	                              growFactor);
 	GrowBuffer<sizeof(float)>(pDevice, pViewOpacityBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount, growFactor);
+
+	// DL_DSplatViews
+	GrowBuffer<sizeof(float) * 4>(pDevice, pDL_DColorMean2DXBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount,
+	                              growFactor);
+	GrowBuffer<sizeof(float) * 4>(pDevice, pDL_DConicMean2DYBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount,
+	                              growFactor);
+	GrowBuffer<sizeof(float)>(pDevice, pDL_DViewOpacityBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount,
+	                          growFactor);
+
+	// SplatQuads
 	GrowBuffer<sizeof(float) * 4>(pDevice, pQuadBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount, growFactor);
 
+	// Draw & Dispatch Args
 	MakeBuffer<sizeof(VkDrawIndirectCommand)>(pDevice, pDrawArgBuffer,
 	                                          VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
 	                                              VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
 	                                              DeviceSorter::GetArgsUsage().countBuffer,
 	                                          1);
+	MakeBuffer<sizeof(VkDispatchIndirectCommand)>(
+	    pDevice, pDispatchArgBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, 1);
 }
 void Rasterizer::Resource::UpdateImage(const myvk::Ptr<myvk::Device> &pDevice, uint32_t width, uint32_t height,
                                        const Rasterizer &rasterizer) {
