@@ -21,10 +21,13 @@ void Rasterizer::Resource::UpdateBuffer(const myvk::Ptr<myvk::Device> &pDevice, 
 	GrowBuffer<sizeof(uint32_t)>(pDevice, pSortPayloadBuffer,
 	                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | DeviceSorter::GetArgsUsage().payloadBuffer,
 	                             splatCount, growFactor);
+	GrowBuffer<sizeof(uint32_t)>(pDevice, pSortSplatIndexBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount,
+	                             growFactor);
 	GrowBuffer<sizeof(float) * 4>(pDevice, pColorMean2DXBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount,
 	                              growFactor);
 	GrowBuffer<sizeof(float) * 4>(pDevice, pConicMean2DYBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount,
 	                              growFactor);
+	GrowBuffer<sizeof(float)>(pDevice, pViewOpacityBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount, growFactor);
 	GrowBuffer<sizeof(float) * 4>(pDevice, pQuadBuffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, splatCount, growFactor);
 
 	MakeBuffer<sizeof(VkDrawIndirectCommand)>(pDevice, pDrawArgBuffer,
@@ -118,7 +121,7 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	        {.binding = SBUF_OPACITIES_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 	         .descriptorCount = 1u,
-	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT},
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
 	        {.binding = SBUF_SHS_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 	         .descriptorCount = 1u,
@@ -132,6 +135,10 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 	         .descriptorCount = 1u,
 	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT},
+	        {.binding = SBUF_SORT_SPLAT_INDICES_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT},
 
 	        {.binding = SBUF_COLORS_MEAN2DXS_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -141,6 +148,11 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 	         .descriptorCount = 1u,
 	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT},
+	        {.binding = SBUF_VIEW_OPACITIES_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT},
+
 	        {.binding = SBUF_QUADS_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 	         .descriptorCount = 1u,
@@ -167,6 +179,45 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 	         .descriptorCount = 1u,
 	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+
+	        {.binding = SBUF_DISPATCH_ARGS_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+
+	        {.binding = SBUF_DL_DMEANS_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+	        {.binding = SBUF_DL_DSCALES_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+	        {.binding = SBUF_DL_DROTATES_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+	        {.binding = SBUF_DL_DOPACITIES_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+	        {.binding = SBUF_DL_DSHS_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+
+	        {.binding = SBUF_DL_DCOLORS_MEAN2DXS_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT},
+	        {.binding = SBUF_DL_DCONICS_MEAN2DYS_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT},
+	        {.binding = SBUF_DL_DVIEW_OPACITIES_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT},
 	    },
 	    VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR);
 
@@ -219,12 +270,18 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.splats.pRotateBuffer, SBUF_ROTATES_BINDING),
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.splats.pOpacityBuffer, SBUF_OPACITIES_BINDING),
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.splats.pSHBuffer, SBUF_SHS_BINDING),
+
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pSortKeyBuffer, SBUF_SORT_KEYS_BINDING),
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pSortPayloadBuffer, SBUF_SORT_PAYLOADS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pSortSplatIndexBuffer,
+	                                                 SBUF_SORT_SPLAT_INDICES_BINDING),
+
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pColorMean2DXBuffer,
 	                                                 SBUF_COLORS_MEAN2DXS_BINDING),
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pConicMean2DYBuffer,
 	                                                 SBUF_CONICS_MEAN2DYS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pViewOpacityBuffer, SBUF_VIEW_OPACITIES_BINDING),
+
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pQuadBuffer, SBUF_QUADS_BINDING),
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pDrawArgBuffer, SBUF_DRAW_ARGS_BINDING),
 	    // myvk::DescriptorSetWrite::WriteUniformBuffer(nullptr, resource.pDrawArgBuffer, SBUF_SORT_COUNT_BINDING),
@@ -281,9 +338,12 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	            DeviceSorter::GetDstRWArgsSync().keyBuffer.GetWrite(),
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_WRITE_BIT}),
 	        resource.pSortPayloadBuffer->GetMemoryBarrier2(
-	            // VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT reads as StorageBuffer (BackwardView)
 	            // VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT reads as StorageBuffer (ForwardDraw.geom | BackwardDraw.geom)
-	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, 0},
+	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, 0},
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_WRITE_BIT}),
+	        resource.pSortSplatIndexBuffer->GetMemoryBarrier2(
+	            // VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT reads as StorageBuffer (BackwardView)
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, 0},
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_WRITE_BIT}),
 	        // SplatView and SplatQuad Buffers
 	        // VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT reads (ForwardDraw.geom | BackwardDraw.geom)
@@ -293,6 +353,10 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	        resource.pConicMean2DYBuffer->GetMemoryBarrier2(
 	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, 0},
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
+	        resource.pViewOpacityBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, 0},
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
+
 	        resource.pQuadBuffer->GetMemoryBarrier2(
 	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, 0},
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
@@ -338,22 +402,27 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	    mpPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, //
 	    0, sizeof(PushConstantData), &pcData);
 
-	// Read-After-Write Barriers for pSortPayloadBuffer, SplatView Buffers, SplatQuad Buffers
+	// Read-After-Write Barriers for pSortPayloadBuffer, pSortSplatIndexBuffer, SplatView Buffers, SplatQuad Buffers
 	pCommandBuffer->CmdPipelineBarrier2(
 	    {},
 	    {
 	        resource.pSortPayloadBuffer->GetMemoryBarrier2(
 	            DeviceSorter::GetDstRWArgsSync().payloadBuffer.GetWrite(),
-	            // VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT reads as StorageBuffer (BackwardView)
 	            // VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT reads as StorageBuffer (ForwardDraw.geom | BackwardDraw.geom)
-	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT,
-	             VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
+	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
+	        resource.pSortSplatIndexBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	            // VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT reads as StorageBuffer (BackwardView)
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
 	        // SplatView and SplatQuad Buffers
 	        // VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT reads (ForwardDraw.geom | BackwardDraw.geom)
 	        resource.pColorMean2DXBuffer->GetMemoryBarrier2(
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
 	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
 	        resource.pConicMean2DYBuffer->GetMemoryBarrier2(
+	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
+	        resource.pViewOpacityBuffer->GetMemoryBarrier2(
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
 	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
 	        resource.pQuadBuffer->GetMemoryBarrier2(
@@ -488,6 +557,7 @@ const Rasterizer::FwdArgsUsage &Rasterizer::GetFwdArgsUsage() {
 } // namespace vkgsraster
 
 // Check DeviceSorter KeyCountBufferOffset
+#undef SBUF_DISPATCH_ARGS_BINDING // Remove warning
 #include <shader/DeviceSorter/Size.hpp>
 static_assert(KEY_COUNT_BUFFER_OFFSET == offsetof(VkDrawIndirectCommand, instanceCount));
 static_assert(KEY_COUNT_BUFFER_OFFSET == SORT_COUNT_BUFFER_OFFSET);

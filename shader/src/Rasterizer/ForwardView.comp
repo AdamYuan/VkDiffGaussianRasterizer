@@ -11,6 +11,10 @@ layout(std430, binding = SBUF_SORT_KEYS_BINDING) writeonly buffer bSortKeys { ui
 layout(std430, binding = SBUF_SORT_PAYLOADS_BINDING) writeonly buffer bSortPayloads { uint gSortPayloads[]; };
 layout(std430, binding = SBUF_DRAW_ARGS_BINDING) buffer bDrawArgs { uint gDrawArgs[]; };
 
+layout(std430, binding = SBUF_SORT_SPLAT_INDICES_BINDING) writeonly buffer bSortSplatIndices {
+	uint gSortSplatIndices[];
+};
+
 // Radix Tricks by Michael Herf
 // http://stereopsis.com/radix.html
 uint float2CmpUint(float f) {
@@ -41,9 +45,10 @@ void main() {
 		return;
 
 	uint sortIdx = atomicAdd(gDrawArgs[1], 1u); // gDrawArgs[1] is InstanceCount
-	storeSplatView(splatIdx, splatView);
-	storeSplatQuad(splatIdx, splatQuad);
+	storeSplatView(sortIdx, splatView);
+	storeSplatQuad(sortIdx, splatQuad);
 
 	gSortKeys[sortIdx] = float2CmpUint(-viewMeanZ);
-	gSortPayloads[sortIdx] = splatIdx;
+	gSortPayloads[sortIdx] = sortIdx;
+	gSortSplatIndices[sortIdx] = splatIdx;
 }

@@ -20,9 +20,9 @@ gOut;
 layout(std430, binding = SBUF_SORT_PAYLOADS_BINDING) readonly buffer bSortPayloads { uint gSortPayloads[]; };
 
 void main() {
-	uint splatIdx = gSortPayloads[gIn[0].instanceID];
-	SplatView splatView = loadSplatView(splatIdx);
-	SplatQuad splatQuad = loadSplatQuad(splatIdx);
+	uint sortIdx = gSortPayloads[gIn[0].instanceID];
+	SplatView splatView = loadSplatView(sortIdx);
+	SplatQuad splatQuad = loadSplatQuad(sortIdx);
 
 	float quadBound = opacity2quadBound(splatView.geom.opacity);
 

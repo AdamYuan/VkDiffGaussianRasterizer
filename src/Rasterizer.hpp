@@ -78,12 +78,17 @@ public:
 	struct Resource {
 		DeviceSorter::Resource sorterResource;
 
-		myvk::Ptr<myvk::BufferBase> pSortKeyBuffer, pSortPayloadBuffer; // P * [uint]
-		myvk::Ptr<myvk::BufferBase> pColorMean2DXBuffer;                // P * [float4]
-		myvk::Ptr<myvk::BufferBase> pConicMean2DYBuffer;                // P * [float4]
-		myvk::Ptr<myvk::BufferBase> pQuadBuffer;                        // P * [float4]
-		myvk::Ptr<myvk::BufferBase> pDrawArgBuffer;                     // uint4
-		myvk::Ptr<myvk::BufferBase> pDispatchArgBuffer;                 // uint3
+		myvk::Ptr<myvk::BufferBase> pSortKeyBuffer, pSortPayloadBuffer;
+		myvk::Ptr<myvk::BufferBase> pSortSplatIndexBuffer; // P * [uint]
+
+		myvk::Ptr<myvk::BufferBase> pColorMean2DXBuffer;   // P * [float4]
+		myvk::Ptr<myvk::BufferBase> pConicMean2DYBuffer;   // P * [float4]
+		myvk::Ptr<myvk::BufferBase> pViewOpacityBuffer;    // P * [float]
+
+		myvk::Ptr<myvk::BufferBase> pQuadBuffer;           // P * [float4]
+
+		myvk::Ptr<myvk::BufferBase> pDrawArgBuffer;        // uint4
+		myvk::Ptr<myvk::BufferBase> pDispatchArgBuffer;    // uint3
 
 		myvk::Ptr<myvk::ImageBase> pColorImage; // W * H * [float4]
 		myvk::Ptr<myvk::ImageView> pColorImageView;
