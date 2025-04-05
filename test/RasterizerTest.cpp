@@ -25,10 +25,21 @@ int main() {
 		auto pSurface = myvk::Surface::Create(pInstance, pWindow);
 		auto pPhysicalDevice = myvk::PhysicalDevice::Fetch(pInstance)[0];
 		auto features = pPhysicalDevice->GetDefaultFeatures();
+		VkPhysicalDeviceShaderAtomicFloatFeaturesEXT shaderAtomicFloatFeature{
+		    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT,
+		    .shaderBufferFloat32AtomicAdd = VK_TRUE,
+		};
+		VkPhysicalDeviceShaderQuadControlFeaturesKHR shaderQuadControlFeature{
+		    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_QUAD_CONTROL_FEATURES_KHR,
+		    .pNext = &shaderAtomicFloatFeature,
+		    .shaderQuadControl = VK_TRUE,
+		};
 		VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT fragShaderInterlockFeature{
 		    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT,
+		    .pNext = &shaderQuadControlFeature,
 		    .fragmentShaderPixelInterlock = VK_TRUE,
 		};
+		features.vk12.hostQueryReset = VK_TRUE;
 		features.vk13.synchronization2 = VK_TRUE;
 		features.vk13.computeFullSubgroups = VK_TRUE;
 		features.SetPNext(&fragShaderInterlockFeature);
@@ -38,6 +49,10 @@ int main() {
 		        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 		        VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
 		        VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME,
+		        VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME,
+		        VK_EXT_LOAD_STORE_OP_NONE_EXTENSION_NAME,
+		        VK_KHR_SHADER_MAXIMAL_RECONVERGENCE_EXTENSION_NAME,
+		        VK_KHR_SHADER_QUAD_CONTROL_EXTENSION_NAME,
 		    });
 	}
 
@@ -82,8 +97,10 @@ int main() {
 	VkGSModel vkGsModel{};
 
 	std::array<Rasterizer::PerfQuery, kFrameCount> rasterizerPerfQueries;
-	for (auto &query : rasterizerPerfQueries)
+	for (auto &query : rasterizerPerfQueries) {
 		query = Rasterizer::PerfQuery::Create(pDevice);
+		query.Reset();
+	}
 
 	Rasterizer::PerfMetrics rasterizerPerfMetrics{};
 
@@ -133,6 +150,7 @@ int main() {
 			const auto &rasterizerPerfQuery = rasterizerPerfQueries[currentFrame];
 
 			rasterizerPerfMetrics = rasterizerPerfQuery.GetMetrics();
+			rasterizerPerfQuery.Reset();
 
 			pCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 

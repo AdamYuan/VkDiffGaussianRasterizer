@@ -87,11 +87,11 @@ void Rasterizer::PerfQuery::CmdWriteTimestamp(const myvk::Ptr<myvk::CommandBuffe
 	vkCmdWriteTimestamp2(pCommandBuffer->GetHandle(), VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, pQueryPool->GetHandle(),
 	                     static_cast<uint32_t>(timestamp));
 }
+void Rasterizer::PerfQuery::Reset() const { pQueryPool->Reset(0, kTimestampCount); }
 Rasterizer::PerfMetrics Rasterizer::PerfQuery::GetMetrics() const {
 	std::array<uint64_t, kTimestampCount> results{};
 	if (pQueryPool->GetResults64(0, kTimestampCount, results.data(), 0) != VK_SUCCESS)
 		return {}; // Not ready
-	pQueryPool->Reset(0, kTimestampCount);
 
 	auto timestampPeriod =
 	    (double)pQueryPool->GetDevicePtr()->GetPhysicalDevicePtr()->GetProperties().vk10.limits.timestampPeriod;
@@ -194,7 +194,7 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	        {.binding = SIMG_IMAGE0_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 	         .descriptorCount = 1u,
-	         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT},
 	        {.binding = TEX_IMAGE0_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
 	         .descriptorCount = 1u,
@@ -202,7 +202,7 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	        {.binding = IATT_IMAGE0_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
 	         .descriptorCount = 1u,
-	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+	         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
 	        {.binding = SBUF_PIXELS_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 	         .descriptorCount = 1u,
@@ -268,12 +268,12 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	}());
 
 	// Backward RenderPass
-	mpForwardRenderPass = myvk::RenderPass::Create(pDevice, [&] {
+	mpBackwardRenderPass = myvk::RenderPass::Create(pDevice, [&] {
 		myvk::RenderPassState2 state;
 		state.SetAttachmentCount(1)
 		    .SetAttachment(0, VK_FORMAT_R32G32B32A32_SFLOAT,
 		                   {.op = VK_ATTACHMENT_LOAD_OP_NONE_EXT, .layout = VK_IMAGE_LAYOUT_GENERAL},
-		                   {.op = VK_ATTACHMENT_STORE_OP_NONE})
+		                   {.op = VK_ATTACHMENT_STORE_OP_NONE, .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
 		    .SetSubpassCount(1)
 		    .SetSubpass(0,
 		                {

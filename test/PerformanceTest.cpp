@@ -23,10 +23,21 @@ int main(int argc, char **argv) {
 		auto pInstance = myvk::Instance::Create({});
 		auto pPhysicalDevice = myvk::PhysicalDevice::Fetch(pInstance)[0];
 		auto features = pPhysicalDevice->GetDefaultFeatures();
+		VkPhysicalDeviceShaderAtomicFloatFeaturesEXT shaderAtomicFloatFeature{
+		    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT,
+		    .shaderBufferFloat32AtomicAdd = VK_TRUE,
+		};
+		VkPhysicalDeviceShaderQuadControlFeaturesKHR shaderQuadControlFeature{
+		    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_QUAD_CONTROL_FEATURES_KHR,
+		    .pNext = &shaderAtomicFloatFeature,
+		    .shaderQuadControl = VK_TRUE,
+		};
 		VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT fragShaderInterlockFeature{
 		    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT,
+		    .pNext = &shaderQuadControlFeature,
 		    .fragmentShaderPixelInterlock = VK_TRUE,
 		};
+		features.vk12.hostQueryReset = VK_TRUE;
 		features.vk13.synchronization2 = VK_TRUE;
 		features.vk13.computeFullSubgroups = VK_TRUE;
 		features.SetPNext(&fragShaderInterlockFeature);
@@ -34,6 +45,10 @@ int main(int argc, char **argv) {
 		                               {
 		                                   VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
 		                                   VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME,
+		                                   VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME,
+		                                   VK_EXT_LOAD_STORE_OP_NONE_EXTENSION_NAME,
+		                                   VK_KHR_SHADER_MAXIMAL_RECONVERGENCE_EXTENSION_NAME,
+		                                   VK_KHR_SHADER_QUAD_CONTROL_EXTENSION_NAME,
 		                                   myvk::GetExternalMemoryExtensionName(),
 		                               });
 	}
@@ -84,6 +99,7 @@ int main(int argc, char **argv) {
 	CuTileRasterizer::PerfQuery cuTileRasterPerfQuery = CuTileRasterizer::PerfQuery::Create();
 
 	for (const auto &entry : gsDataset.entries) {
+		vkRasterPerfQuery.Reset();
 		vkRasterResource.UpdateImage(pDevice, entry.camera.width, entry.camera.height, vkRasterizer);
 		vkRasterFwdROArgs.camera = entry.camera;
 		std::size_t colorBufferSize = 3 * entry.camera.width * entry.camera.height * sizeof(float);

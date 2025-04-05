@@ -122,6 +122,7 @@ public:
 
 		static PerfQuery Create(const myvk::Ptr<myvk::Device> &pDevice);
 		void CmdWriteTimestamp(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, Timestamp timestamp) const;
+		void Reset() const;
 		PerfMetrics GetMetrics() const;
 	};
 
