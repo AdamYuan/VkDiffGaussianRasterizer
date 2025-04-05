@@ -106,6 +106,10 @@ Rasterizer::PerfMetrics Rasterizer::PerfQuery::GetMetrics() const {
 	    .forwardView = getMilliseconds(kForward, kForwardView),
 	    .forwardSort = getMilliseconds(kForwardView, kForwardSort),
 	    .forwardDraw = getMilliseconds(kForwardSort, kForwardDraw),
+	    .backward = getMilliseconds(kBackward, kBackwardView),
+	    .backwardReset = getMilliseconds(kBackward, kBackwardReset),
+	    .backwardDraw = getMilliseconds(kBackwardReset, kBackwardDraw),
+	    .backwardView = getMilliseconds(kBackwardDraw, kBackwardView),
 	};
 }
 
@@ -714,6 +718,8 @@ void Rasterizer::CmdBackward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffe
 	        myvk::DescriptorSetWrite::WriteStorageImage(nullptr, resource.pImageView1, SIMG_IMAGE0_BINDING),
 	    }); // Now switch storage image slot to image1
 
+	perfQuery.CmdWriteTimestamp(pCommandBuffer, PerfQuery::Timestamp::kBackward);
+
 	// BackwardReset
 	pCommandBuffer->CmdPipelineBarrier2(
 	    {},
@@ -738,6 +744,7 @@ void Rasterizer::CmdBackward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffe
 	    {});
 	pCommandBuffer->CmdBindPipeline(mpBackwardResetPipeline);
 	pCommandBuffer->CmdDispatch(BACKWARD_RESET_GROUP_COUNT, 1, 1);
+	perfQuery.CmdWriteTimestamp(pCommandBuffer, PerfQuery::Timestamp::kBackwardReset);
 
 	// Clear Image1
 	pCommandBuffer->CmdPipelineBarrier2(
@@ -794,6 +801,7 @@ void Rasterizer::CmdBackward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffe
 	    .extent = {.width = roArgs.fwd.camera.width, .height = roArgs.fwd.camera.height},
 	}});
 	pCommandBuffer->CmdDrawIndirect(resource.pDrawArgBuffer, 0, 1);
+	perfQuery.CmdWriteTimestamp(pCommandBuffer, PerfQuery::Timestamp::kBackwardDraw);
 	pCommandBuffer->CmdEndRenderPass();
 
 	// BackwardView
@@ -820,6 +828,7 @@ void Rasterizer::CmdBackward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffe
 	    {});
 	pCommandBuffer->CmdBindPipeline(mpBackwardViewPipeline);
 	pCommandBuffer->CmdDispatchIndirect(resource.pDispatchArgBuffer);
+	perfQuery.CmdWriteTimestamp(pCommandBuffer, PerfQuery::Timestamp::kBackwardView);
 }
 
 const Rasterizer::FwdRWArgsSyncState &Rasterizer::GetSrcFwdRWArgsSync() {

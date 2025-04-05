@@ -118,6 +118,7 @@ public:
 
 	struct PerfMetrics {
 		double forward, forwardView, forwardSort, forwardDraw;
+		double backward, backwardReset, backwardDraw, backwardView;
 	};
 
 	struct PerfQuery {
@@ -126,6 +127,10 @@ public:
 			kForwardView,
 			kForwardSort,
 			kForwardDraw,
+			kBackward,
+			kBackwardReset,
+			kBackwardDraw,
+			kBackwardView,
 			kTimestampCount,
 		};
 		myvk::Ptr<myvk::QueryPool> pQueryPool;
