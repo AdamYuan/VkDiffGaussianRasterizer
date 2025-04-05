@@ -66,6 +66,7 @@ struct VkGSModel {
 		return vkModel;
 	}
 	static VkGSModel Create(const myvk::Ptr<myvk::Queue> &pQueue, VkBufferUsageFlags bufferUsage, const GSModel &model);
+	static VkGSModel Create(const myvk::Ptr<myvk::Device> &pDevice, VkBufferUsageFlags bufferUsage, uint32_t splatCount);
 	bool IsEmpty() const { return splatCount == 0; }
 	vkgsraster::Rasterizer::SplatArgs GetSplatArgs() const;
 };

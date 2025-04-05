@@ -104,6 +104,7 @@ int main(int argc, char **argv) {
 		vkRasterPerfQuery.Reset();
 		vkRasterResource.UpdateImage(pDevice, entry.camera.width, entry.camera.height, vkRasterizer);
 		vkRasterFwdROArgs.camera = entry.camera;
+		vkRasterBwdROArgs.fwd.camera = entry.camera;
 		std::size_t pixelBufferSize = 3 * entry.camera.width * entry.camera.height * sizeof(float);
 		if (!vkRasterFwdRWArgs.pOutPixelBuffer || vkRasterFwdRWArgs.pOutPixelBuffer->GetSize() < pixelBufferSize) {
 			vkRasterFwdRWArgs.pOutPixelBuffer =
@@ -134,19 +135,36 @@ int main(int argc, char **argv) {
 		printf("cu_forward: %lf ms (numRendered = %d)\n", cuTileRasterPerfMetrics.forward,
 		       cuTileRasterResource.numRendered);
 		printf("cu_backward: %lf ms\n", cuTileRasterPerfMetrics.backward);
+		printf("cu: %lf ms\n", cuTileRasterPerfMetrics.forward + cuTileRasterPerfMetrics.backward);
 		CuImageWrite::Write(entry.imageName + "_cu.png", cuOutPixels, entry.camera.width, entry.camera.height);
 
-		pCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-		vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource,
-		                        vkRasterPerfQuery);
-		pCommandBuffer->End();
-		pCommandBuffer->Submit(pFence);
-		pFence->Wait();
-		pCommandPool->Reset();
-		pFence->Reset();
+		const auto runVkCommand = [&](auto &&cmdRun) {
+			pCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+			cmdRun();
+			pCommandBuffer->End();
+			pCommandBuffer->Submit(pFence);
+			pFence->Wait();
+			pCommandPool->Reset();
+			pFence->Reset();
+		};
+		runVkCommand([&] {
+			vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource,
+			                        vkRasterPerfQuery);
+		});
+		runVkCommand([&] {
+			vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource,
+			                         vkRasterPerfQuery);
+		});
 
 		auto vkRasterPerfMetrics = vkRasterPerfQuery.GetMetrics();
 		printf("vk_forward: %lf ms\n", vkRasterPerfMetrics.forward);
+		printf("vk_backward: %lf ms\n", vkRasterPerfMetrics.backward);
+		printf("vk: %lf ms\n", vkRasterPerfMetrics.forward + vkRasterPerfMetrics.backward);
+
+		printf("speedup_forward: %lf\n", cuTileRasterPerfMetrics.forward / vkRasterPerfMetrics.forward);
+		printf("speedup_backward: %lf\n", cuTileRasterPerfMetrics.backward / vkRasterPerfMetrics.backward);
+		printf("speedup: %lf\n", (cuTileRasterPerfMetrics.forward + cuTileRasterPerfMetrics.backward) /
+		                             (vkRasterPerfMetrics.forward + vkRasterPerfMetrics.backward));
 		CuImageWrite::Write(entry.imageName + "_vk.png", cuOutPixels, entry.camera.width, entry.camera.height);
 
 		break; // Only once entry

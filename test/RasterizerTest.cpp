@@ -93,8 +93,13 @@ int main() {
 	rasterizerResource.UpdateImage(pDevice, kWidth, kHeight, rasterizer);
 	auto pPixelBuffer = myvk::Buffer::Create(pDevice, sizeof(float) * 3 * kWidth * kHeight, 0,
 	                                         Rasterizer::GetFwdArgsUsage().outPixelBuffer);
+	auto pDL_DPixelBuffer = myvk::Buffer::Create(pDevice, sizeof(float) * 3 * kWidth * kHeight, 0,
+	                                             Rasterizer::GetBwdArgsUsage().dL_dPixelBuffer);
+
+	bool backward = false;
 
 	VkGSModel vkGsModel{};
+	Rasterizer::SplatArgs pDL_DSplats;
 
 	std::array<Rasterizer::PerfQuery, kFrameCount> rasterizerPerfQueries;
 	for (auto &query : rasterizerPerfQueries) {
@@ -123,8 +128,12 @@ int main() {
 					    VkGSModel::Create(pGenericQueue, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, GSModel::Load(filename));
 					if (!vkGsModel.IsEmpty())
 						rasterizerResource.UpdateBuffer(pDevice, vkGsModel.splatCount);
+					pDL_DSplats =
+					    VkGSModel::Create(pDevice, Rasterizer::GetBwdArgsUsage().dL_dSplatBuffers, vkGsModel.splatCount)
+					        .GetSplatArgs();
 				}
 			}
+			ImGui::Checkbox("Backward", &backward);
 			if (ImGui::Checkbox("Output Image", &forwardOutputImage)) {
 				if (forwardOutputImage != rasterizer.GetConfig().forwardOutputImage) {
 					pGenericQueue->WaitIdle();
@@ -137,6 +146,10 @@ int main() {
 			ImGui::Text("Forward View: %lf ms", rasterizerPerfMetrics.forwardView);
 			ImGui::Text("Forward Sort: %lf ms", rasterizerPerfMetrics.forwardSort);
 			ImGui::Text("Forward Draw: %lf ms", rasterizerPerfMetrics.forwardDraw);
+			ImGui::Text("Backward: %lf ms", rasterizerPerfMetrics.backward);
+			ImGui::Text("Backward Reset: %lf ms", rasterizerPerfMetrics.backwardReset);
+			ImGui::Text("Backward Draw: %lf ms", rasterizerPerfMetrics.backwardDraw);
+			ImGui::Text("Backward View: %lf ms", rasterizerPerfMetrics.backwardView);
 			ImGui::End();
 
 			ImGui::Render();
@@ -169,26 +182,58 @@ int main() {
 					                                     Rasterizer::GetSrcFwdRWArgsSync().outPixelBuffer)},
 					    {});
 
-				rasterizer.CmdForward(pCommandBuffer,
-				                      {
-				                          .camera =
-				                              {
-				                                  .width = kWidth,
-				                                  .height = kHeight,
-				                                  .focalX = float(kHeight),
-				                                  .focalY = float(kHeight),
-				                                  .viewMat = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f},
-				                                  .pos = {0.0f, 0.0f, 0.0f},
-				                              },
-				                          .splatCount = vkGsModel.splatCount,
-				                          .splats = vkGsModel.GetSplatArgs(),
-				                          .bgColor = {1.0f, 1.0f, 1.0f},
-				                      },
+				Rasterizer::FwdROArgs fwdROArgs = {
+				    .camera =
+				        {
+				            .width = kWidth,
+				            .height = kHeight,
+				            .focalX = float(kHeight),
+				            .focalY = float(kHeight),
+				            .viewMat = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f},
+				            .pos = {0.0f, 0.0f, 0.0f},
+				        },
+				    .splatCount = vkGsModel.splatCount,
+				    .splats = vkGsModel.GetSplatArgs(),
+				    .bgColor = {1.0f, 1.0f, 1.0f},
+				};
+				rasterizer.CmdForward(pCommandBuffer, fwdROArgs,
 				                      {
 				                          .pOutPixelBuffer = pPixelBuffer,
 				                          .pOutPixelImage = pSwapchainImage,
 				                      },
 				                      rasterizerResource, rasterizerPerfQuery);
+
+				if (backward) {
+					pCommandBuffer->CmdPipelineBarrier2(
+					    {},
+					    {
+					        pDL_DSplats.pMeanBuffer->GetMemoryBarrier2(
+					            Rasterizer::GetDstBwdRWArgsSync().dL_dSplatBuffers.GetWrite(),
+					            Rasterizer::GetSrcBwdRWArgsSync().dL_dSplatBuffers),
+					        pDL_DSplats.pScaleBuffer->GetMemoryBarrier2(
+					            Rasterizer::GetDstBwdRWArgsSync().dL_dSplatBuffers.GetWrite(),
+					            Rasterizer::GetSrcBwdRWArgsSync().dL_dSplatBuffers),
+					        pDL_DSplats.pRotateBuffer->GetMemoryBarrier2(
+					            Rasterizer::GetDstBwdRWArgsSync().dL_dSplatBuffers.GetWrite(),
+					            Rasterizer::GetSrcBwdRWArgsSync().dL_dSplatBuffers),
+					        pDL_DSplats.pOpacityBuffer->GetMemoryBarrier2(
+					            Rasterizer::GetDstBwdRWArgsSync().dL_dSplatBuffers.GetWrite(),
+					            Rasterizer::GetSrcBwdRWArgsSync().dL_dSplatBuffers),
+					        pDL_DSplats.pSHBuffer->GetMemoryBarrier2(
+					            Rasterizer::GetDstBwdRWArgsSync().dL_dSplatBuffers.GetWrite(),
+					            Rasterizer::GetSrcBwdRWArgsSync().dL_dSplatBuffers),
+					    },
+					    {});
+					rasterizer.CmdBackward(pCommandBuffer,
+					                       {
+					                           .fwd = fwdROArgs,
+					                           .pdL_dPixelBuffer = pDL_DPixelBuffer,
+					                       },
+					                       {
+					                           .dL_dSplats = pDL_DSplats,
+					                       },
+					                       rasterizerResource, rasterizerPerfQuery);
+				}
 			}
 
 			pCommandBuffer->CmdBeginRenderPass(pRenderPass, pFramebuffer, {pSwapchainImageView}, {{{}}});
