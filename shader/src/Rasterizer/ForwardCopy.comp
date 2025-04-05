@@ -2,7 +2,7 @@
 #extension GL_EXT_samplerless_texture_functions : require
 
 #define RASTERIZER_STORE_PIXEL
-#define RASTERIZER_THREAD_GROUP_TILING_X
+// #define RASTERIZER_THREAD_GROUP_TILING_X
 #include "Common.glsl"
 
 layout(local_size_x = FORWARD_COPY_DIM_X, local_size_y = FORWARD_COPY_DIM_Y, local_size_z = 1) in;
@@ -10,8 +10,8 @@ layout(local_size_x = FORWARD_COPY_DIM_X, local_size_y = FORWARD_COPY_DIM_Y, loc
 layout(binding = TEX_IMAGE0_BINDING) uniform texture2D gColors_Ts;
 
 void main() {
-	VGroupThreadID vID = ThreadGroupTilingX(uvec2(FORWARD_COPY_DIM_X, FORWARD_COPY_DIM_Y), 8);
-	uvec2 pixelCoord = vID.threadID;
+	// VGroupThreadID vID = ThreadGroupTilingX(uvec2(FORWARD_COPY_DIM_X, FORWARD_COPY_DIM_Y), 8);
+	uvec2 pixelCoord = gl_GlobalInvocationID.xy; // vID.threadID;
 
 	if (!validPixelCoord(pixelCoord))
 		return;
