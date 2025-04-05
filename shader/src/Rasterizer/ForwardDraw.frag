@@ -4,9 +4,8 @@
 #include "Common.glsl"
 
 in bIn {
-	layout(location = 0) flat float opacity;
-	layout(location = 1) flat vec3 color;
-	layout(location = 2) noperspective vec2 quadPos;
+	layout(location = 0) flat vec4 color_opacity;
+	layout(location = 1) noperspective vec2 quadPos;
 }
 gIn;
 
@@ -15,13 +14,16 @@ layout(rgba32f, binding = SIMG_IMAGE0_BINDING) coherent uniform image2D gColors_
 layout(pixel_interlock_ordered) in;
 
 void main() {
-	float alpha = quadPos2alpha(gIn.quadPos, gIn.opacity);
+	vec3 color = gIn.color_opacity.xyz;
+	float opacity = gIn.color_opacity.w;
+
+	float alpha = quadPos2alpha(gIn.quadPos, opacity);
 	if (alpha < ALPHA_MIN)
 		discard;
 
 	alpha = min(alpha, ALPHA_MAX);
 	float oneMinusAlpha = 1.0 - alpha;
-	vec3 alphaColor = alpha * gIn.color;
+	vec3 alphaColor = alpha * color;
 
 	ivec2 coord = ivec2(gl_FragCoord.xy);
 
