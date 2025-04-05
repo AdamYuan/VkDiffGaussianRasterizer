@@ -1,6 +1,7 @@
 #version 460
 #extension GL_ARB_fragment_shader_interlock : require
 #extension GL_KHR_shader_subgroup_vote : require
+#extension GL_KHR_shader_subgroup_quad : require
 #extension GL_EXT_shader_quad_control : require
 
 #define RASTERIZER_ATOMICADD_DL_DSPLAT_VIEW
@@ -74,7 +75,6 @@ void main() {
 		dL_dSplatView = quadReduceDL_DSplatView(dL_dSplatView);
 	}
 
-	if (callAtomicAdd) {
+	if (callAtomicAdd)
 		atomicAddDL_DSplatView(gIn.sortIdx, dL_dSplatView);
-	}
 }
