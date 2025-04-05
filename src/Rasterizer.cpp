@@ -54,18 +54,19 @@ void Rasterizer::Resource::UpdateBuffer(const myvk::Ptr<myvk::Device> &pDevice, 
 }
 void Rasterizer::Resource::UpdateImage(const myvk::Ptr<myvk::Device> &pDevice, uint32_t width, uint32_t height,
                                        const Rasterizer &rasterizer) {
-	VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	VkImageUsageFlags usage0 =
+	    VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
 	if (rasterizer.GetConfig().forwardOutputImage)
-		usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+		usage0 |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 	else
-		usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-
-	if (ResizeImage<VK_FORMAT_R32G32B32A32_SFLOAT>(pDevice, pImage0, usage, width, height))
+		usage0 |= VK_IMAGE_USAGE_SAMPLED_BIT;
+	if (ResizeImage<VK_FORMAT_R32G32B32A32_SFLOAT>(pDevice, pImage0, usage0, width, height))
 		pImageView0 = myvk::ImageView::Create(pImage0, VK_IMAGE_VIEW_TYPE_2D);
-	if (ResizeImage<VK_FORMAT_R32G32B32A32_SFLOAT>(pDevice, pImage1, usage, width, height))
-		pImageView1 = myvk::ImageView::Create(pImage1, VK_IMAGE_VIEW_TYPE_2D);
-
 	ResizeFramebuffer(rasterizer.mpForwardRenderPass, {}, pForwardFramebuffer, width, height);
+
+	if (ResizeImage<VK_FORMAT_R32G32B32A32_SFLOAT>(
+	        pDevice, pImage1, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT, width, height))
+		pImageView1 = myvk::ImageView::Create(pImage1, VK_IMAGE_VIEW_TYPE_2D);
 	ResizeFramebuffer(rasterizer.mpBackwardRenderPass, {pImageView0}, pBackwardFramebuffer, width, height);
 }
 
@@ -91,8 +92,7 @@ void Rasterizer::PerfQuery::CmdWriteTimestamp(const myvk::Ptr<myvk::CommandBuffe
 void Rasterizer::PerfQuery::Reset() const { pQueryPool->Reset(0, kTimestampCount); }
 Rasterizer::PerfMetrics Rasterizer::PerfQuery::GetMetrics() const {
 	std::array<uint64_t, kTimestampCount> results{};
-	if (pQueryPool->GetResults64(0, kTimestampCount, results.data(), 0) != VK_SUCCESS)
-		return {}; // Not ready
+	pQueryPool->GetResults64(0, kTimestampCount, results.data(), 0);
 
 	auto timestampPeriod =
 	    (double)pQueryPool->GetDevicePtr()->GetPhysicalDevicePtr()->GetProperties().vk10.limits.timestampPeriod;
@@ -688,6 +688,7 @@ void Rasterizer::CmdBackward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffe
 
 	// Descriptors and Push Constants
 	pCommandBuffer->CmdPushDescriptorSet(mpPipelineLayout, VK_PIPELINE_BIND_POINT_COMPUTE, 0, descriptorSetWrites);
+	pCommandBuffer->CmdPushDescriptorSet(mpPipelineLayout, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, descriptorSetWrites);
 	pCommandBuffer->CmdPushConstants(
 	    mpPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, //
 	    0, sizeof(PushConstantData), &pcData);
@@ -712,11 +713,12 @@ void Rasterizer::CmdBackward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffe
 	    });
 	pCommandBuffer->CmdBindPipeline(mpBackwardCopyPipeline);
 	pCommandBuffer->CmdDispatch(BACKWARD_COPY_DIM_X, BACKWARD_COPY_DIM_Y, 1);
+	// For BackwardDraw, switch storage image slot to image1
 	pCommandBuffer->CmdPushDescriptorSet(
-	    mpPipelineLayout, VK_PIPELINE_BIND_POINT_COMPUTE, 0,
+	    mpPipelineLayout, VK_PIPELINE_BIND_POINT_GRAPHICS, 0,
 	    {
 	        myvk::DescriptorSetWrite::WriteStorageImage(nullptr, resource.pImageView1, SIMG_IMAGE0_BINDING),
-	    }); // Now switch storage image slot to image1
+	    });
 
 	perfQuery.CmdWriteTimestamp(pCommandBuffer, PerfQuery::Timestamp::kBackward);
 
