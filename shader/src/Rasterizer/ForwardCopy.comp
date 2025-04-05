@@ -7,7 +7,7 @@
 
 layout(local_size_x = FORWARD_COPY_DIM_X, local_size_y = FORWARD_COPY_DIM_Y, local_size_z = 1) in;
 
-layout(binding = TEX_IMAGE0_BINDING) uniform texture2D gColors_Ts;
+layout(binding = TEX_IMAGE0_BINDING) uniform texture2D gPixels_Ts;
 
 void main() {
 	// VGroupThreadID vID = ThreadGroupTilingX(uvec2(FORWARD_COPY_DIM_X, FORWARD_COPY_DIM_Y), 8);
@@ -15,6 +15,6 @@ void main() {
 
 	if (!validPixelCoord(pixelCoord))
 		return;
-	vec3 pixel = texelFetch(gColors_Ts, ivec2(pixelCoord), 0).xyz;
+	vec3 pixel = texelFetch(gPixels_Ts, ivec2(pixelCoord), 0).xyz;
 	storePixel(pixelCoord, pixel);
 }
