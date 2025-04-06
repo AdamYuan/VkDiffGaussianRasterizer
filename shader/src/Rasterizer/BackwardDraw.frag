@@ -23,11 +23,10 @@ layout(input_attachment_index = 0, binding = IATT_IMAGE0_BINDING) uniform subpas
 
 layout(pixel_interlock_ordered) in;
 
-float sumVec3(vec3 v) { return v.x + v.y + v.z; }
-
 void main() {
 	float alpha = quadPos2alpha(gIn.quadPos, gIn.opacity);
-	if (subgroupQuadAll(alpha < ALPHA_MIN))
+	bool alphaDiscard = alpha < ALPHA_MIN;
+	if (subgroupQuadAll(alphaDiscard))
 		discard;
 
 	vec4 dL_dPixel_T = subpassLoad(gDL_DPixels_Ts);
@@ -53,7 +52,7 @@ void main() {
 	float Ti = T / Ri_1;      // T_i
 
 	vec3 dL_dColor = dL_dPixel * (alpha * Ti);
-	float dL_dAlpha = sumVec3(dL_dPixel * ((gIn.color - Mi) * Ti - gBgColor * T / oneMinusAlpha));
+	float dL_dAlpha = dot(dL_dPixel, (gIn.color - Mi) * Ti - gBgColor * T / oneMinusAlpha);
 
 	SplatViewGeom splatViewGeom;
 	splatViewGeom.conic = gIn.conic;
@@ -65,6 +64,9 @@ void main() {
 	SplatView dL_dSplatView;
 	dL_dSplatView.color = dL_dColor;
 	dL_dSplatView.geom = bwd_splatViewGeom2alpha(splatViewGeom, gl_FragCoord.xy, camera, dL_dAlpha);
+
+	if (alphaDiscard)
+		dL_dSplatView = zeroDL_DSplatView();
 
 	bool callAtomicAdd;
 	if (subgroupAllEqual(gIn.sortIdx)) {

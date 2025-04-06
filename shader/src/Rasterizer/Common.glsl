@@ -231,6 +231,14 @@ void atomicAddDL_DSplatView(uint sortIdx, SplatView dL_dSplatView) {
 #ifdef RASTERIZER_REDUCE_DL_DSPLAT_VIEW
 #extension GL_KHR_shader_subgroup_arithmetic : require
 #extension GL_KHR_shader_subgroup_quad : require
+SplatView zeroDL_DSplatView() {
+	SplatView dL_dSplatView;
+	dL_dSplatView.color = vec3(0);
+	dL_dSplatView.geom.mean2D = vec2(0);
+	dL_dSplatView.geom.conic = vec3(0);
+	dL_dSplatView.geom.opacity = 0;
+	return dL_dSplatView;
+}
 SplatView subgroupReduceDL_DSplatView(SplatView dL_dSplatView) {
 	dL_dSplatView.geom.conic = subgroupAdd(dL_dSplatView.geom.conic);
 	dL_dSplatView.geom.mean2D = subgroupAdd(dL_dSplatView.geom.mean2D);

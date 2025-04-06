@@ -15,13 +15,6 @@ layout(std430, binding = SBUF_SORT_SPLAT_INDICES_BINDING) writeonly buffer bSort
 	uint gSortSplatIndices[];
 };
 
-// Radix Tricks by Michael Herf
-// http://stereopsis.com/radix.html
-uint float2CmpUint(float f) {
-	uint mask = (-int(floatBitsToUint(f) >> 31)) | 0x80000000;
-	return floatBitsToUint(f) ^ mask;
-}
-
 void main() {
 	uint splatIdx = gl_GlobalInvocationID.x;
 
@@ -48,7 +41,8 @@ void main() {
 	storeSplatView(sortIdx, splatView);
 	storeSplatQuad(sortIdx, splatQuad);
 
-	gSortKeys[sortIdx] = float2CmpUint(-viewMeanZ);
+	// viewMeanZ > 0 is guaranteed
+	gSortKeys[sortIdx] = ~floatBitsToUint(viewMeanZ);
 	gSortPayloads[sortIdx] = sortIdx;
 	gSortSplatIndices[sortIdx] = splatIdx;
 }
