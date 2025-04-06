@@ -985,20 +985,21 @@ bool behindFrustum(Splat splat_2, Camera camera_6, out float o_viewMeanZ_0) {
 	o_viewMeanZ_0 = _S361;
 	return _S361 < 0.20000000298023224;
 }
+float opacity2quadBound(float opacity) { return sqrt(2.0 * (5.54126358032226562 + log(opacity))); }
 bool inFrustum(SplatViewGeom splatViewGeom_2, SplatQuad splatQuad_0, Camera camera_7) {
 	vec2 camHalfRes_2 = vec2(camera_7.resolution) * 0.5;
+	vec2 quadExtent_0 = opacity2quadBound(splatViewGeom_2.opacity) * (abs(splatQuad_0.axis1) + abs(splatQuad_0.axis2));
 	bool _S362;
-	if ((any(bvec2((lessThan(splatViewGeom_2.mean2D, -1.29999995231628418 * camHalfRes_2)))))) {
+	if ((any(bvec2((greaterThan(splatViewGeom_2.mean2D - quadExtent_0, camHalfRes_2)))))) {
 		_S362 = true;
 	} else {
-		_S362 = (any(bvec2((greaterThan(splatViewGeom_2.mean2D, 1.29999995231628418 * camHalfRes_2)))));
+		_S362 = (any(bvec2((lessThan(splatViewGeom_2.mean2D + quadExtent_0, -camHalfRes_2)))));
 	}
 	if (_S362) {
 		return false;
 	}
 	return true;
 }
-float opacity2quadBound(float opacity) { return sqrt(2.0 * (5.54126358032226562 + log(opacity))); }
 vec2 pos2D2clip(vec2 pos, Camera camera_8) { return pos * (2.0 / vec2(camera_8.resolution)); }
 vec2 axis2D2clip(vec2 axis_0, Camera camera_9) { return axis_0 * (2.0 / vec2(camera_9.resolution)); }
 float quadPos2alpha(vec2 quadPos_0, float opacity) { return opacity * exp(-0.5 * dot(quadPos_0, quadPos_0)); }

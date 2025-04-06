@@ -216,9 +216,13 @@ bool behindFrustum(Splat splat, Camera camera, out float o_viewMeanZ) {
 [noinline]
 bool inFrustum(SplatViewGeom splatViewGeom, SplatQuad splatQuad, Camera camera) {
 	float2 camHalfRes = float2(camera.resolution) * 0.5;
-	if (any(splatViewGeom.mean2D < -1.3 * camHalfRes) || any(splatViewGeom.mean2D > 1.3 * camHalfRes))
+
+	float quadBound = opacity2quadBound(splatViewGeom.opacity);
+	float2 quadExtent = quadBound * (abs(splatQuad.axis1) + abs(splatQuad.axis2));
+	float2 quadCenter = splatViewGeom.mean2D;
+
+	if (any(quadCenter - quadExtent > camHalfRes) || any(quadCenter + quadExtent < -camHalfRes))
 		return false;
-	// TODO: Implement this
 	return true;
 }
 
