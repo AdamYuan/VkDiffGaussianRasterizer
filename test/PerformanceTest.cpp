@@ -1,5 +1,4 @@
 #include "../src/Rasterizer.hpp"
-#include "CuImageWrite.hpp"
 #include "CuTileRasterizer.hpp"
 #include "GSDataset.hpp"
 #include "GSModel.hpp"
@@ -9,6 +8,16 @@
 #include <myvk/Instance.hpp>
 #include <myvk/Queue.hpp>
 #include <myvk/QueueSelector.hpp>
+
+static constexpr uint32_t kMaxWriteSplatCount = 128;
+
+namespace cuperftest {
+void WritePixelsPNG(const std::filesystem::path &filename, const float *devicePixels, uint32_t width, uint32_t height);
+void RandomPixels(float *devicePixels, uint32_t width, uint32_t height);
+void ClearDL_DSplats(const CuTileRasterizer::SplatArgs &splats, uint32_t splatCount);
+void WriteDL_DSplatsJSON(const std::filesystem::path &filename, const CuTileRasterizer::SplatArgs &splats,
+                         uint32_t splatCount);
+} // namespace cuperftest
 
 int main(int argc, char **argv) {
 	--argc, ++argv;
@@ -112,9 +121,13 @@ int main(int argc, char **argv) {
 			                       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 		}
 		if (!vkRasterBwdROArgs.pdL_dPixelBuffer || vkRasterBwdROArgs.pdL_dPixelBuffer->GetSize() < pixelBufferSize) {
-			vkRasterBwdROArgs.pdL_dPixelBuffer =
+			auto pdL_dPixelBuffer =
 			    VkCuBuffer::Create(pDevice, pixelBufferSize, vkgsraster::Rasterizer::GetBwdArgsUsage().dL_dPixelBuffer,
 			                       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+			vkRasterBwdROArgs.pdL_dPixelBuffer = pdL_dPixelBuffer;
+
+			cuperftest::RandomPixels(pdL_dPixelBuffer->GetCudaMappedPtr<float>(), entry.camera.width,
+			                         entry.camera.height);
 		}
 
 		cuTileRasterFwdROArgs.Update(vkRasterFwdROArgs);
@@ -128,6 +141,7 @@ int main(int argc, char **argv) {
 		                          cuTileRasterPerfQuery);
 
 		CuTileRasterizer::Backward(cuTileRasterBwdROArgs, cuTileRasterBwdRWArgs, cuTileRasterResource);
+		cuperftest::ClearDL_DSplats(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
 		CuTileRasterizer::Backward(cuTileRasterBwdROArgs, cuTileRasterBwdRWArgs, cuTileRasterResource,
 		                           cuTileRasterPerfQuery);
 
@@ -136,7 +150,9 @@ int main(int argc, char **argv) {
 		       cuTileRasterResource.numRendered);
 		printf("cu_backward: %lf ms\n", cuTileRasterPerfMetrics.backward);
 		printf("cu: %lf ms\n", cuTileRasterPerfMetrics.forward + cuTileRasterPerfMetrics.backward);
-		CuImageWrite::Write(entry.imageName + "_cu.png", cuOutPixels, entry.camera.width, entry.camera.height);
+		cuperftest::WritePixelsPNG(entry.imageName + "_cu.png", cuOutPixels, entry.camera.width, entry.camera.height);
+		cuperftest::WriteDL_DSplatsJSON(entry.imageName + "_cu.json", cuTileRasterBwdRWArgs.dL_dSplats,
+		                                std::min(vkGsModel.splatCount, kMaxWriteSplatCount));
 
 		const auto runVkCommand = [&](auto &&cmdRun) {
 			pCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
@@ -151,6 +167,7 @@ int main(int argc, char **argv) {
 			vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource,
 			                        vkRasterPerfQuery);
 		});
+		cuperftest::ClearDL_DSplats(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
 		runVkCommand([&] {
 			vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource,
 			                         vkRasterPerfQuery);
@@ -165,7 +182,9 @@ int main(int argc, char **argv) {
 		printf("speedup_backward: %lf\n", cuTileRasterPerfMetrics.backward / vkRasterPerfMetrics.backward);
 		printf("speedup: %lf\n", (cuTileRasterPerfMetrics.forward + cuTileRasterPerfMetrics.backward) /
 		                             (vkRasterPerfMetrics.forward + vkRasterPerfMetrics.backward));
-		CuImageWrite::Write(entry.imageName + "_vk.png", cuOutPixels, entry.camera.width, entry.camera.height);
+		cuperftest::WritePixelsPNG(entry.imageName + "_vk.png", cuOutPixels, entry.camera.width, entry.camera.height);
+		cuperftest::WriteDL_DSplatsJSON(entry.imageName + "_vk.json", cuTileRasterBwdRWArgs.dL_dSplats,
+		                                std::min(vkGsModel.splatCount, kMaxWriteSplatCount));
 
 		break; // Only once entry
 	}

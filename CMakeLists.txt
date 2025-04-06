@@ -92,9 +92,8 @@ add_executable(PerformanceTest
         test/VkCuBuffer.hpp
         test/CuTileRasterizer.cu
         test/CuTileRasterizer.hpp
-        test/CuImageWrite.cu
-        test/CuImageWrite.hpp
         test/PerformanceTest.cpp
+        test/PerformanceTest.cu
 )
 target_link_libraries(PerformanceTest PRIVATE
         myvk::vulkan
