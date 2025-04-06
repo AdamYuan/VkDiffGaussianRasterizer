@@ -69,6 +69,7 @@ void main() {
 		dL_dSplatView = zeroDL_DSplatView();
 
 	bool callAtomicAdd;
+	[[branch]]
 	if (subgroupAllEqual(gIn.sortIdx)) {
 		callAtomicAdd = subgroupElect();
 		dL_dSplatView = subgroupReduceDL_DSplatView(dL_dSplatView);
