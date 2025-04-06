@@ -712,7 +712,8 @@ void Rasterizer::CmdBackward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffe
 	            }),
 	    });
 	pCommandBuffer->CmdBindPipeline(mpBackwardCopyPipeline);
-	pCommandBuffer->CmdDispatch(BACKWARD_COPY_DIM_X, BACKWARD_COPY_DIM_Y, 1);
+	pCommandBuffer->CmdDispatch((roArgs.fwd.camera.width + BACKWARD_COPY_DIM_X - 1) / BACKWARD_COPY_DIM_X,
+	                            (roArgs.fwd.camera.height + BACKWARD_COPY_DIM_Y - 1) / BACKWARD_COPY_DIM_Y, 1u);
 	// For BackwardDraw, switch storage image slot to image1
 	pCommandBuffer->CmdPushDescriptorSet(
 	    mpPipelineLayout, VK_PIPELINE_BIND_POINT_GRAPHICS, 0,
