@@ -29,6 +29,9 @@ void main() {
 	if (subgroupQuadAll(alphaDiscard))
 		discard;
 
+	// if (alphaDiscard)
+	// 	alpha = 0;
+
 	vec4 dL_dPixel_T = subpassLoad(gDL_DPixels_Ts);
 
 	alpha = min(alpha, ALPHA_MAX);
@@ -65,8 +68,8 @@ void main() {
 	dL_dSplatView.color = dL_dColor;
 	dL_dSplatView.geom = bwd_splatViewGeom2alpha(splatViewGeom, gl_FragCoord.xy, camera, dL_dAlpha);
 
-	if (alphaDiscard)
-		dL_dSplatView = zeroDL_DSplatView();
+	// if (alphaDiscard)
+	// 	dL_dSplatView = zeroDL_DSplatView();
 
 	bool callAtomicAdd;
 	[[branch]]
