@@ -21,7 +21,7 @@ gIn;
 layout(rgba32f, binding = SIMG_IMAGE0_BINDING) coherent uniform image2D gMs_Rs;
 layout(input_attachment_index = 0, binding = IATT_IMAGE0_BINDING) uniform subpassInput gDL_DPixels_Ts;
 
-layout(pixel_interlock_ordered) in;
+layout(pixel_interlock_ordered, full_quads) in;
 
 void main() {
 	float alpha = quadPos2alpha(gIn.quadPos, gIn.opacity);

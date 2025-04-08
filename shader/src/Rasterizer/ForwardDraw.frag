@@ -24,7 +24,7 @@ gIn;
 
 layout(rgba32f, binding = SIMG_IMAGE0_BINDING) coherent uniform image2D gColors_Ts;
 
-layout(pixel_interlock_ordered) in;
+layout(pixel_interlock_ordered, full_quads) in;
 
 void main() {
 	float alpha = quadPos2alpha(gIn.quadPos, gIn.opacity);
