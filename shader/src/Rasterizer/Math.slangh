@@ -181,28 +181,50 @@ Splat bwd_splat2splatView(Splat splat, Camera camera, SplatView dL_dsplatView) {
 }
 
 [noinline]
-float quadPos2alpha(float2 quadPos, float opacity) {
+float quadPos2alpha(float2 quadPos, float opacity, out float o_G) {
 	float power = -0.5 * dot(quadPos, quadPos);
-	return opacity * exp(power);
+	float G = exp(power);
+	o_G = G;
+	return opacity * G;
+}
+
+[noinline]
+float quadPos2alpha(float2 quadPos, float opacity) {
+	float G;
+	return quadPos2alpha(quadPos, opacity, G);
 }
 
 [noinline]
 [Differentiable]
 float splatViewGeom2alpha(SplatViewGeom splatViewGeom, no_diff float2 fragCoord, no_diff Camera camera) {
 	fragCoord -= float2(camera.resolution) * 0.5;
-	float2 x2D = fragCoord - splatViewGeom.mean2D;
+	float2 d = fragCoord - splatViewGeom.mean2D;
 
-	float power = -0.5 * (splatViewGeom.conic.x * x2D.x * x2D.x + splatViewGeom.conic.z * x2D.y * x2D.y) //
-	              - splatViewGeom.conic.y * x2D.x * x2D.y;
+	float power = -0.5 * (splatViewGeom.conic.x * d.x * d.x + splatViewGeom.conic.z * d.y * d.y) //
+	              - splatViewGeom.conic.y * d.x * d.y;
 	// power = min(power, 0.0);
 	return splatViewGeom.opacity * exp(power);
 }
 
 [noinline]
-SplatViewGeom bwd_splatViewGeom2alpha(SplatViewGeom splatViewGeom, float2 fragCoord, Camera camera, float dL_dalpha) {
-	var dp = diffPair(splatViewGeom);
-	bwd_diff(splatViewGeom2alpha)(dp, fragCoord, camera, dL_dalpha);
-	return dp.d;
+SplatViewGeom bwd_splatViewGeom2alpha(SplatViewGeom splatViewGeom, float2 fragCoord, Camera camera, float G,
+                                      float dL_dalpha) {
+	float dL_dG = splatViewGeom.opacity * dL_dalpha;
+	fragCoord -= float2(camera.resolution) * 0.5;
+	float2 d = splatViewGeom.mean2D - fragCoord;
+	float gdx = G * d.x;
+	float gdy = G * d.y;
+	float dG_ddelx = -gdx * splatViewGeom.conic.x - gdy * splatViewGeom.conic.y;
+	float dG_ddely = -gdy * splatViewGeom.conic.z - gdx * splatViewGeom.conic.y;
+
+	SplatViewGeom dL_dGeom;
+	dL_dGeom.mean2D.x = dL_dG * dG_ddelx;
+	dL_dGeom.mean2D.y = dL_dG * dG_ddely;
+	dL_dGeom.conic.x = -0.5 * gdx * d.x * dL_dG;
+	dL_dGeom.conic.y = -gdx * d.y * dL_dG;
+	dL_dGeom.conic.z = -0.5 * gdy * d.y * dL_dG;
+	dL_dGeom.opacity = G * dL_dalpha;
+	return dL_dGeom;
 }
 
 [noinline]

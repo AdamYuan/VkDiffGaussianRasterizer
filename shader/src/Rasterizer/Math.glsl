@@ -904,103 +904,63 @@ Splat bwd_splat2splatView(Splat splat_1, Camera camera_2, SplatView dL_dsplatVie
 	s_bwd_splat2splatView_0(dp_0, camera_2, dL_dsplatView_0);
 	return dp_0.differential_0;
 }
-void _d_exp_0(inout DiffPair_float_0 dpx_7, float dOut_7) {
-	float _S331 = exp(dpx_7.primal_0) * dOut_7;
-	dpx_7.primal_0 = dpx_7.primal_0;
-	dpx_7.differential_0 = _S331;
-	return;
-}
 float splatViewGeom2alpha(SplatViewGeom splatViewGeom_0, vec2 fragCoord_0, Camera camera_3) {
-	vec2 x2D_0 = fragCoord_0 - vec2(camera_3.resolution) * 0.5 - splatViewGeom_0.mean2D;
-	float _S332 = x2D_0.x;
-	float _S333 = x2D_0.y;
+	vec2 d_0 = fragCoord_0 - vec2(camera_3.resolution) * 0.5 - splatViewGeom_0.mean2D;
+	float _S331 = d_0.x;
+	float _S332 = d_0.y;
 	return splatViewGeom_0.opacity *
-	       exp(-0.5 * (splatViewGeom_0.conic.x * _S332 * _S332 + splatViewGeom_0.conic.z * _S333 * _S333) -
-	           splatViewGeom_0.conic.y * _S332 * _S333);
+	       exp(-0.5 * (splatViewGeom_0.conic.x * _S331 * _S331 + splatViewGeom_0.conic.z * _S332 * _S332) -
+	           splatViewGeom_0.conic.y * _S331 * _S332);
 }
-SplatViewGeom SplatViewGeom_x24_syn_dzero_0() {
-	SplatViewGeom result_3;
-	result_3.conic = vec3(0.0);
-	result_3.mean2D = vec2(0.0);
-	result_3.opacity = 0.0;
-	return result_3;
-}
-struct DiffPair_SplatViewGeom_0 {
-	SplatViewGeom primal_0;
-	SplatViewGeom differential_0;
-};
-float s_primal_ctx_exp_0(float _S334) { return exp(_S334); }
-void s_bwd_prop_exp_0(inout DiffPair_float_0 _S335, float _S336) {
-	_d_exp_0(_S335, _S336);
-	return;
-}
-void s_bwd_prop_splatViewGeom2alpha_0(inout DiffPair_SplatViewGeom_0 dpsplatViewGeom_0, vec2 fragCoord_1,
-                                      Camera camera_4, float _s_dOut_7) {
-	vec2 x2D_1 = fragCoord_1 - vec2(camera_4.resolution) * 0.5 - dpsplatViewGeom_0.primal_0.mean2D;
-	float _S337 = dpsplatViewGeom_0.primal_0.conic.x;
-	float _S338 = x2D_1.x;
-	float _S339 = _S337 * _S338;
-	float _S340 = dpsplatViewGeom_0.primal_0.conic.z;
-	float _S341 = x2D_1.y;
-	float _S342 = _S340 * _S341;
-	float _S343 = dpsplatViewGeom_0.primal_0.conic.y;
-	float _S344 = _S343 * _S338;
-	float power_0 = -0.5 * (_S339 * _S338 + _S342 * _S341) - _S344 * _S341;
-	float _S345 = dpsplatViewGeom_0.primal_0.opacity * _s_dOut_7;
-	float _S346 = s_primal_ctx_exp_0(power_0) * _s_dOut_7;
-	DiffPair_float_0 _S347;
-	_S347.primal_0 = power_0;
-	_S347.differential_0 = 0.0;
-	s_bwd_prop_exp_0(_S347, _S345);
-	float _S348 = -_S347.differential_0;
-	float _S349 = _S341 * _S348;
-	float _S350 = -0.5 * _S347.differential_0;
-	float _S351 = _S341 * _S350;
-	float _S352 = _S338 * _S350;
-	vec3 _S353 = vec3(_S338 * _S352, _S338 * _S349, _S341 * _S351);
-	vec2 _S354 = -vec2(_S343 * _S349 + _S339 * _S350 + _S337 * _S352, _S344 * _S348 + _S342 * _S350 + _S340 * _S351);
-	SplatViewGeom _S355 = SplatViewGeom_x24_syn_dzero_0();
-	_S355.opacity = _S346;
-	_S355.conic = _S353;
-	_S355.mean2D = _S354;
-	dpsplatViewGeom_0.primal_0 = dpsplatViewGeom_0.primal_0;
-	dpsplatViewGeom_0.differential_0 = _S355;
-	return;
-}
-void s_bwd_splatViewGeom2alpha_0(inout DiffPair_SplatViewGeom_0 _S356, vec2 _S357, Camera _S358, float _S359) {
-	s_bwd_prop_splatViewGeom2alpha_0(_S356, _S357, _S358, _S359);
-	return;
-}
-SplatViewGeom bwd_splatViewGeom2alpha(SplatViewGeom splatViewGeom_1, vec2 fragCoord_2, Camera camera_5,
-                                      float dL_dalpha_0) {
-	SplatViewGeom _S360 = SplatViewGeom_x24_syn_dzero_0();
-	DiffPair_SplatViewGeom_0 dp_1;
-	dp_1.primal_0 = splatViewGeom_1;
-	dp_1.differential_0 = _S360;
-	s_bwd_splatViewGeom2alpha_0(dp_1, fragCoord_2, camera_5, dL_dalpha_0);
-	return dp_1.differential_0;
-}
-bool behindFrustum(Splat splat_2, Camera camera_6, out float o_viewMeanZ_0) {
-	float _S361 = (((splat_2.geom.mean - camera_6.pos) * (camera_6.viewMat))).z;
-	o_viewMeanZ_0 = _S361;
-	return _S361 < 0.20000000298023224;
+bool behindFrustum(Splat splat_2, Camera camera_4, out float o_viewMeanZ_0) {
+	float _S333 = (((splat_2.geom.mean - camera_4.pos) * (camera_4.viewMat))).z;
+	o_viewMeanZ_0 = _S333;
+	return _S333 < 0.20000000298023224;
 }
 float opacity2quadBound(float opacity) { return sqrt(2.0 * (5.54126358032226562 + log(opacity))); }
-bool inFrustum(SplatViewGeom splatViewGeom_2, SplatQuad splatQuad_0, Camera camera_7) {
-	vec2 camHalfRes_2 = vec2(camera_7.resolution) * 0.5;
-	vec2 quadExtent_0 = opacity2quadBound(splatViewGeom_2.opacity) * (abs(splatQuad_0.axis1) + abs(splatQuad_0.axis2));
-	bool _S362;
-	if ((any(bvec2((greaterThan(splatViewGeom_2.mean2D - quadExtent_0, camHalfRes_2)))))) {
-		_S362 = true;
+bool inFrustum(SplatViewGeom splatViewGeom_1, SplatQuad splatQuad_0, Camera camera_5) {
+	vec2 camHalfRes_2 = vec2(camera_5.resolution) * 0.5;
+	vec2 quadExtent_0 = opacity2quadBound(splatViewGeom_1.opacity) * (abs(splatQuad_0.axis1) + abs(splatQuad_0.axis2));
+	bool _S334;
+	if ((any(bvec2((greaterThan(splatViewGeom_1.mean2D - quadExtent_0, camHalfRes_2)))))) {
+		_S334 = true;
 	} else {
-		_S362 = (any(bvec2((lessThan(splatViewGeom_2.mean2D + quadExtent_0, -camHalfRes_2)))));
+		_S334 = (any(bvec2((lessThan(splatViewGeom_1.mean2D + quadExtent_0, -camHalfRes_2)))));
 	}
-	if (_S362) {
+	if (_S334) {
 		return false;
 	}
 	return true;
 }
-vec2 pos2D2clip(vec2 pos, Camera camera_8) { return pos * (2.0 / vec2(camera_8.resolution)); }
-vec2 axis2D2clip(vec2 axis_0, Camera camera_9) { return axis_0 * (2.0 / vec2(camera_9.resolution)); }
-float quadPos2alpha(vec2 quadPos_0, float opacity) { return opacity * exp(-0.5 * dot(quadPos_0, quadPos_0)); }
+vec2 pos2D2clip(vec2 pos, Camera camera_6) { return pos * (2.0 / vec2(camera_6.resolution)); }
+vec2 axis2D2clip(vec2 axis_0, Camera camera_7) { return axis_0 * (2.0 / vec2(camera_7.resolution)); }
+float quadPos2alpha(vec2 quadPos_0, float opacity, out float o_G_0) {
+	float G_0 = exp(-0.5 * dot(quadPos_0, quadPos_0));
+	o_G_0 = G_0;
+	return opacity * G_0;
+}
+float quadPos2alpha(vec2 quadPos_1, float opacity) {
+	float G_1;
+	return quadPos2alpha(quadPos_1, opacity, G_1);
+}
+SplatViewGeom bwd_splatViewGeom2alpha(SplatViewGeom splatViewGeom_2, vec2 fragCoord_1, Camera camera_8, float G_2,
+                                      float dL_dalpha_0) {
+	float dL_dG_0 = splatViewGeom_2.opacity * dL_dalpha_0;
+	vec2 d_1 = splatViewGeom_2.mean2D - (fragCoord_1 - vec2(camera_8.resolution) * 0.5);
+	float _S335 = d_1.x;
+	float gdx_0 = G_2 * _S335;
+	float _S336 = d_1.y;
+	float gdy_0 = G_2 * _S336;
+	float _S337 = -gdx_0;
+	float _S338 = splatViewGeom_2.conic.y;
+	float dG_ddely_0 = -gdy_0 * splatViewGeom_2.conic.z - gdx_0 * _S338;
+	SplatViewGeom dL_dGeom_0;
+	dL_dGeom_0.mean2D[0] = dL_dG_0 * (_S337 * splatViewGeom_2.conic.x - gdy_0 * _S338);
+	dL_dGeom_0.mean2D[1] = dL_dG_0 * dG_ddely_0;
+	dL_dGeom_0.conic[0] = -0.5 * gdx_0 * _S335 * dL_dG_0;
+	dL_dGeom_0.conic[1] = _S337 * _S336 * dL_dG_0;
+	dL_dGeom_0.conic[2] = -0.5 * gdy_0 * _S336 * dL_dG_0;
+	dL_dGeom_0.opacity = G_2 * dL_dalpha_0;
+	return dL_dGeom_0;
+}
 #endif
