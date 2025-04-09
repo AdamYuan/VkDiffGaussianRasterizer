@@ -38,8 +38,8 @@ void main() {
 	if (subgroupQuadAll(alphaDiscard))
 		discard;
 
-	// if (alphaDiscard)
-	// 	alpha = 0;
+	if (alphaDiscard)
+		alpha = 0;
 
 	alpha = min(alpha, ALPHA_MAX);
 	float oneMinusAlpha = 1.0 - alpha;

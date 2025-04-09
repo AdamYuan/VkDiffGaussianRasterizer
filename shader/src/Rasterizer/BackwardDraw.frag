@@ -2,6 +2,8 @@
 #extension GL_ARB_fragment_shader_interlock : require
 #extension GL_KHR_shader_subgroup_vote : require
 #extension GL_KHR_shader_subgroup_quad : require
+#extension GL_EXT_maximal_reconvergence : require
+#extension GL_KHR_shader_subgroup_ballot : require
 #extension GL_EXT_shader_quad_control : require
 
 #define RASTERIZER_ATOMICADD_DL_DSPLAT_VIEW
@@ -29,8 +31,8 @@ void main() {
 	if (subgroupQuadAll(alphaDiscard))
 		discard;
 
-	// if (alphaDiscard)
-	// 	alpha = 0;
+	if (alphaDiscard)
+		alpha = 0;
 
 	vec4 dL_dPixel_T = subpassLoad(gDL_DPixels_Ts);
 
@@ -46,6 +48,9 @@ void main() {
 	Mi_1_Ri_1.xyz += alphaColor;
 	imageStore(gMs_Rs, coord, Mi_1_Ri_1);
 	endInvocationInterlockARB();
+
+	// if (subgroupQuadAll(alphaDiscard || gl_HelperInvocation))
+	// 	return;
 
 	vec3 dL_dPixel = dL_dPixel_T.xyz;
 	float T = dL_dPixel_T.w;
@@ -68,16 +73,23 @@ void main() {
 	dL_dSplatView.color = dL_dColor;
 	dL_dSplatView.geom = bwd_splatViewGeom2alpha(splatViewGeom, gl_FragCoord.xy, camera, dL_dAlpha);
 
-	// if (alphaDiscard)
-	// 	dL_dSplatView = zeroDL_DSplatView();
+	// dL_dSplatView.geom.opacity = 1.0;
+	if (alphaDiscard || gl_HelperInvocation)
+		dL_dSplatView = zeroDL_DSplatView();
+
+	uvec4 subgroupNotHelperMask = subgroupBallot(!gl_HelperInvocation);
 
 	bool callAtomicAdd;
 	[[branch]]
 	if (subgroupAllEqual(gIn.sortIdx)) {
-		callAtomicAdd = subgroupElect();
+		callAtomicAdd = gl_SubgroupInvocationID == subgroupBallotFindLSB(subgroupNotHelperMask);
 		dL_dSplatView = subgroupReduceDL_DSplatView(dL_dSplatView);
 	} else {
-		callAtomicAdd = gl_SubgroupInvocationID == subgroupQuadBroadcast(gl_SubgroupInvocationID, 0);
+		uvec4 quadNotHelperMask = subgroupNotHelperMask & gl_SubgroupEqMask;
+		quadNotHelperMask |= subgroupQuadSwapHorizontal(quadNotHelperMask);
+		quadNotHelperMask |= subgroupQuadSwapVertical(quadNotHelperMask);
+
+		callAtomicAdd = gl_SubgroupInvocationID == subgroupBallotFindLSB(quadNotHelperMask);
 		dL_dSplatView = quadReduceDL_DSplatView(dL_dSplatView);
 	}
 
