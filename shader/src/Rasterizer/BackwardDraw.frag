@@ -74,7 +74,6 @@ void main() {
 	dL_dSplatView.color = dL_dColor;
 	dL_dSplatView.geom = bwd_splatViewGeom2alpha(splatViewGeom, gl_FragCoord.xy, camera, dL_dAlpha);
 
-	// dL_dSplatView.geom.opacity = 1.0;
 	if (pixelDiscard)
 		dL_dSplatView = zeroDL_DSplatView();
 
