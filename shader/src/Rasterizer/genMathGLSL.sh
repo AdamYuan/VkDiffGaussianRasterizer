@@ -1,4 +1,5 @@
-#!/bin/bash
+#!/usr/bin/env bash
+cd "$(dirname "$0")"
 ~/.cache/packman/chk/slang/2025.4/bin/slangc Math.cs.slang -stage compute -target glsl -o Math.glsl
 sed -i '/^#/d' Math.glsl # Remove all lines starting with '#'
 sed -i '/^$/d' Math.glsl # Remove all empty lines
