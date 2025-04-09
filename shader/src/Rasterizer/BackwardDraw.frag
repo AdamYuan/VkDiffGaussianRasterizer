@@ -25,8 +25,11 @@ layout(input_attachment_index = 0, binding = IATT_IMAGE0_BINDING) uniform subpas
 
 layout(pixel_interlock_ordered, full_quads) in;
 
+#define BALANCING_THRESHOLD 16
+
 void main() {
-	float alpha = quadPos2alpha(gIn.quadPos, gIn.opacity);
+	float G;
+	float alpha = quadPos2alpha(gIn.quadPos, gIn.opacity, G);
 	bool pixelDiscard = alpha < ALPHA_MIN || gl_HelperInvocation;
 	bool quadDiscard = subgroupQuadAll(pixelDiscard);
 	if (quadDiscard)
@@ -71,22 +74,24 @@ void main() {
 	Camera camera = loadCamera();
 
 	SplatView dL_dSplatView;
-	dL_dSplatView.color = dL_dColor;
-	dL_dSplatView.geom = bwd_splatViewGeom2alpha(splatViewGeom, gl_FragCoord.xy, camera, dL_dAlpha);
 
 	if (pixelDiscard)
 		dL_dSplatView = zeroDL_DSplatView();
+	else {
+		dL_dSplatView.color = dL_dColor;
+		dL_dSplatView.geom = bwd_splatViewGeom2alpha(splatViewGeom, gl_FragCoord.xy, camera, G, dL_dAlpha);
+	}
 
 	// Should not perform atomicAdd on helper lanes
-	uvec4 subgroupAtomicAddMask = subgroupBallot(!gl_HelperInvocation);
+	uvec4 subgroupReduceMask = subgroupBallot(!pixelDiscard);
 
 	bool callAtomicAdd;
 	[[branch]]
-	if (subgroupAllEqual(gIn.sortIdx)) {
-		callAtomicAdd = gl_SubgroupInvocationID == subgroupBallotFindLSB(subgroupAtomicAddMask);
+	if (subgroupAllEqual(gIn.sortIdx) && subgroupBallotBitCount(subgroupReduceMask) >= BALANCING_THRESHOLD) {
+		callAtomicAdd = gl_SubgroupInvocationID == subgroupBallotFindLSB(subgroupReduceMask);
 		dL_dSplatView = subgroupReduceDL_DSplatView(dL_dSplatView);
 	} else {
-		uvec4 quadAtomicAddMask = subgroupAtomicAddMask & gl_SubgroupEqMask;
+		uvec4 quadAtomicAddMask = subgroupReduceMask & gl_SubgroupEqMask;
 		quadAtomicAddMask |= subgroupQuadSwapHorizontal(quadAtomicAddMask);
 		quadAtomicAddMask |= subgroupQuadSwapVertical(quadAtomicAddMask);
 

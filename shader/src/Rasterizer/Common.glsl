@@ -225,12 +225,16 @@ void atomicAddDL_DSplatView(uint sortIdx, SplatView dL_dSplatView) {
 	atomicAdd(gDL_DConics_Mean2DYs[sortIdx].z, dL_dSplatView.geom.conic.z);
 	atomicAdd(gDL_DConics_Mean2DYs[sortIdx].w, dL_dSplatView.geom.mean2D.y);
 	atomicAdd(gDL_DViewOpacities[sortIdx], dL_dSplatView.geom.opacity);
+	/* gDL_DColors_Mean2DXs[sortIdx] = vec4(dL_dSplatView.color, dL_dSplatView.geom.mean2D.x);
+	gDL_DConics_Mean2DYs[sortIdx] = vec4(dL_dSplatView.geom.conic, dL_dSplatView.geom.mean2D.y);
+	gDL_DViewOpacities[sortIdx] = dL_dSplatView.geom.opacity; */
 }
 #endif
 
 #ifdef RASTERIZER_REDUCE_DL_DSPLAT_VIEW
 #extension GL_KHR_shader_subgroup_arithmetic : require
 #extension GL_KHR_shader_subgroup_quad : require
+// #extension GL_KHR_shader_subgroup_shuffle_relative : require
 SplatView zeroDL_DSplatView() {
 	SplatView dL_dSplatView;
 	dL_dSplatView.color = vec3(0);
@@ -240,6 +244,12 @@ SplatView zeroDL_DSplatView() {
 	return dL_dSplatView;
 }
 SplatView subgroupReduceDL_DSplatView(SplatView dL_dSplatView) {
+	/* [[unroll]] for (uint delta = 1; delta < gl_SubgroupSize; delta <<= 1) {
+	    dL_dSplatView.geom.conic += subgroupShuffleDown(dL_dSplatView.geom.conic, delta);
+	    dL_dSplatView.geom.mean2D += subgroupShuffleDown(dL_dSplatView.geom.mean2D, delta);
+	    dL_dSplatView.geom.opacity += subgroupShuffleDown(dL_dSplatView.geom.opacity, delta);
+	    dL_dSplatView.color += subgroupShuffleDown(dL_dSplatView.color, delta);
+	} */
 	dL_dSplatView.geom.conic = subgroupAdd(dL_dSplatView.geom.conic);
 	dL_dSplatView.geom.mean2D = subgroupAdd(dL_dSplatView.geom.mean2D);
 	dL_dSplatView.geom.opacity = subgroupAdd(dL_dSplatView.geom.opacity);
@@ -248,12 +258,12 @@ SplatView subgroupReduceDL_DSplatView(SplatView dL_dSplatView) {
 }
 SplatView quadReduceDL_DSplatView(SplatView dL_dSplatView) {
 	dL_dSplatView.geom.conic += subgroupQuadSwapHorizontal(dL_dSplatView.geom.conic);
-	dL_dSplatView.geom.conic += subgroupQuadSwapVertical(dL_dSplatView.geom.conic);
 	dL_dSplatView.geom.mean2D += subgroupQuadSwapHorizontal(dL_dSplatView.geom.mean2D);
-	dL_dSplatView.geom.mean2D += subgroupQuadSwapVertical(dL_dSplatView.geom.mean2D);
 	dL_dSplatView.geom.opacity += subgroupQuadSwapHorizontal(dL_dSplatView.geom.opacity);
-	dL_dSplatView.geom.opacity += subgroupQuadSwapVertical(dL_dSplatView.geom.opacity);
 	dL_dSplatView.color += subgroupQuadSwapHorizontal(dL_dSplatView.color);
+	dL_dSplatView.geom.conic += subgroupQuadSwapVertical(dL_dSplatView.geom.conic);
+	dL_dSplatView.geom.mean2D += subgroupQuadSwapVertical(dL_dSplatView.geom.mean2D);
+	dL_dSplatView.geom.opacity += subgroupQuadSwapVertical(dL_dSplatView.geom.opacity);
 	dL_dSplatView.color += subgroupQuadSwapVertical(dL_dSplatView.color);
 	return dL_dSplatView;
 }
