@@ -34,11 +34,11 @@ void main() {
 #endif
 	// if (alpha < ALPHA_MIN)
 	// 	discard;
-	bool alphaDiscard = alpha < ALPHA_MIN;
-	if (subgroupQuadAll(alphaDiscard))
+	bool pixelDiscard = alpha < ALPHA_MIN;
+	if (subgroupQuadAll(pixelDiscard))
 		discard;
 
-	if (alphaDiscard)
+	if (pixelDiscard)
 		alpha = 0;
 
 	alpha = min(alpha, ALPHA_MAX);

@@ -27,11 +27,12 @@ layout(pixel_interlock_ordered, full_quads) in;
 
 void main() {
 	float alpha = quadPos2alpha(gIn.quadPos, gIn.opacity);
-	bool alphaDiscard = alpha < ALPHA_MIN;
-	if (subgroupQuadAll(alphaDiscard))
+	bool pixelDiscard = alpha < ALPHA_MIN || gl_HelperInvocation;
+	bool quadDiscard = subgroupQuadAll(pixelDiscard);
+	if (quadDiscard)
 		discard;
 
-	if (alphaDiscard)
+	if (pixelDiscard)
 		alpha = 0;
 
 	vec4 dL_dPixel_T = subpassLoad(gDL_DPixels_Ts);
@@ -49,8 +50,8 @@ void main() {
 	imageStore(gMs_Rs, coord, Mi_1_Ri_1);
 	endInvocationInterlockARB();
 
-	// if (subgroupQuadAll(alphaDiscard || gl_HelperInvocation))
-	// 	return;
+	if (quadDiscard)
+		return;
 
 	vec3 dL_dPixel = dL_dPixel_T.xyz;
 	float T = dL_dPixel_T.w;
@@ -74,22 +75,22 @@ void main() {
 	dL_dSplatView.geom = bwd_splatViewGeom2alpha(splatViewGeom, gl_FragCoord.xy, camera, dL_dAlpha);
 
 	// dL_dSplatView.geom.opacity = 1.0;
-	if (alphaDiscard || gl_HelperInvocation)
+	if (pixelDiscard)
 		dL_dSplatView = zeroDL_DSplatView();
 
-	uvec4 subgroupNotHelperMask = subgroupBallot(!gl_HelperInvocation);
+	uvec4 subgroupAtomicAddMask = subgroupBallot(!gl_HelperInvocation); // Cannot perform atomicAdd on helper lanes
 
 	bool callAtomicAdd;
 	[[branch]]
 	if (subgroupAllEqual(gIn.sortIdx)) {
-		callAtomicAdd = gl_SubgroupInvocationID == subgroupBallotFindLSB(subgroupNotHelperMask);
+		callAtomicAdd = gl_SubgroupInvocationID == subgroupBallotFindLSB(subgroupAtomicAddMask);
 		dL_dSplatView = subgroupReduceDL_DSplatView(dL_dSplatView);
 	} else {
-		uvec4 quadNotHelperMask = subgroupNotHelperMask & gl_SubgroupEqMask;
-		quadNotHelperMask |= subgroupQuadSwapHorizontal(quadNotHelperMask);
-		quadNotHelperMask |= subgroupQuadSwapVertical(quadNotHelperMask);
+		uvec4 quadAtomicAddMask = subgroupAtomicAddMask & gl_SubgroupEqMask;
+		quadAtomicAddMask |= subgroupQuadSwapHorizontal(quadAtomicAddMask);
+		quadAtomicAddMask |= subgroupQuadSwapVertical(quadAtomicAddMask);
 
-		callAtomicAdd = gl_SubgroupInvocationID == subgroupBallotFindLSB(quadNotHelperMask);
+		callAtomicAdd = gl_SubgroupInvocationID == subgroupBallotFindLSB(quadAtomicAddMask);
 		dL_dSplatView = quadReduceDL_DSplatView(dL_dSplatView);
 	}
 
