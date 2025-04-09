@@ -77,7 +77,8 @@ void main() {
 	if (pixelDiscard)
 		dL_dSplatView = zeroDL_DSplatView();
 
-	uvec4 subgroupAtomicAddMask = subgroupBallot(!gl_HelperInvocation); // Cannot perform atomicAdd on helper lanes
+	// Should not perform atomicAdd on helper lanes
+	uvec4 subgroupAtomicAddMask = subgroupBallot(!gl_HelperInvocation);
 
 	bool callAtomicAdd;
 	[[branch]]
