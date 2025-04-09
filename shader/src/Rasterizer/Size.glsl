@@ -4,8 +4,6 @@
 #define SH_DEGREE 3
 #define SH_SIZE ((SH_DEGREE + 1) * (SH_DEGREE + 1))
 
-#define T_MIN 0.0001
-
 #define ALPHA_MIN (1.0 / 255.0)
 #define ALPHA_MAX 0.99
 #define ALPHA_LOG_INV_MIN 5.541263545158426 // log(255)

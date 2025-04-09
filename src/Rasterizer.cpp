@@ -193,7 +193,7 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	        {.binding = UBUF_SORT_COUNT_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 	         .descriptorCount = 1u,
-	         .stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_COMPUTE_BIT},
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
 
 	        // Images
 	        {.binding = SIMG_IMAGE0_BINDING,
@@ -419,10 +419,9 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	        resource.pDrawArgBuffer->GetMemoryBarrier2(
 	            // VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT reads as DrawArg (ForwardDraw | BackwardDraw)
 	            // VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT reads as UniformBuffer (BackwardReset | BackwardView)
-	            // VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT reads as UniformBuffer (BackwardDraw.geom)
 	            // DeviceSorter reads
 	            {VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
-	                 VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT | DeviceSorter::GetROArgsSync().countBuffer.stage_mask,
+	                 DeviceSorter::GetROArgsSync().countBuffer.stage_mask,
 	             0},
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
 	    },
@@ -486,10 +485,8 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	            DeviceSorter::GetROArgsSync().countBuffer |
 	                // VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT reads as DrawArg (ForwardDraw | BackwardDraw)
 	                // VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT reads as UniformBuffer (BackwardReset | BackwardView)
-	                // VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT reads as UniformBuffer (BackwardDraw.geom)
 	                myvk::BufferSyncState{
-	                    VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
-	                        VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT,
+	                    VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 	                    VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_UNIFORM_READ_BIT,
 	                }),
 	    },
@@ -552,7 +549,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	            {VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL}),
 	    });
 	pCommandBuffer->CmdClearColorImage(resource.pImage0, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-	                                   {0.0f, 0.0f, 0.0f, 1.0f});
+	                                   {roArgs.bgColor[0], roArgs.bgColor[1], roArgs.bgColor[2], 1.0f});
 
 	// ForwardDraw
 	pCommandBuffer->CmdPipelineBarrier2(

@@ -49,11 +49,8 @@ void main() {
 
 	beginInvocationInterlockARB();
 	vec4 color_T = imageLoad(gColors_Ts, coord);
-	float test_T = color_T.w * oneMinusAlpha;
-	if (test_T >= T_MIN) {
-		color_T.xyz += alphaColor * color_T.w;
-		color_T.w = test_T;
-		imageStore(gColors_Ts, coord, color_T);
-	}
+	color_T *= oneMinusAlpha;
+	color_T.xyz += alphaColor;
+	imageStore(gColors_Ts, coord, color_T);
 	endInvocationInterlockARB();
 }

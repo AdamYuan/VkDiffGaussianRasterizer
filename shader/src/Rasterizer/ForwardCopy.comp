@@ -15,7 +15,6 @@ void main() {
 
 	if (!validPixelCoord(pixelCoord))
 		return;
-	vec4 pixel_T = texelFetch(gPixels_Ts, ivec2(pixelCoord), 0);
-	pixel_T.xyz += gBgColor * pixel_T.w;
-	storePixel(pixelCoord, pixel_T.xyz);
+	vec3 pixel = texelFetch(gPixels_Ts, ivec2(pixelCoord), 0).xyz;
+	storePixel(pixelCoord, pixel);
 }
