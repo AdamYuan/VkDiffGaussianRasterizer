@@ -42,7 +42,7 @@ void main() {
 	storeSplatQuad(sortIdx, splatQuad);
 
 	// viewMeanZ > 0 is guaranteed
-	gSortKeys[sortIdx] = ~floatBitsToUint(viewMeanZ);
+	gSortKeys[sortIdx] = floatBitsToUint(viewMeanZ);
 	gSortPayloads[sortIdx] = sortIdx;
 	gSortSplatIndices[sortIdx] = splatIdx;
 }
