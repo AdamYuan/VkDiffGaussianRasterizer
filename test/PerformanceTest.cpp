@@ -21,10 +21,14 @@ void WriteDL_DSplatsJSON(const std::filesystem::path &filename, const CuTileRast
 
 int main(int argc, char **argv) {
 	--argc, ++argv;
-	if (argc != 2) {
-		printf("./PerformanceTest [3dgs.ply] [cameras.json]\n");
+	if (argc < 2) {
+		printf("./PerformanceTest [3dgs.ply] [cameras.json] (-w: write results)\n");
 		return EXIT_FAILURE;
 	}
+
+	bool writeResult = false;
+	if (argc == 3 && std::string{argv[2]} == "-w")
+		writeResult = true;
 
 	myvk::Ptr<myvk::Device> pDevice;
 	myvk::Ptr<myvk::Queue> pGenericQueue;
@@ -109,7 +113,8 @@ int main(int argc, char **argv) {
 	CuTileRasterizer::BwdRWArgs cuTileRasterBwdRWArgs{};
 	CuTileRasterizer::PerfQuery cuTileRasterPerfQuery = CuTileRasterizer::PerfQuery::Create();
 
-	for (const auto &entry : gsDataset.entries) {
+	for (auto &entry : gsDataset.entries) {
+		printf("\n%s\n", entry.imageName.c_str());
 		vkRasterPerfQuery.Reset();
 		vkRasterResource.UpdateImage(pDevice, entry.camera.width, entry.camera.height, vkRasterizer);
 		vkRasterFwdROArgs.camera = entry.camera;
@@ -136,24 +141,7 @@ int main(int argc, char **argv) {
 		cuTileRasterBwdRWArgs.Update(vkRasterBwdRWArgs);
 		float *cuOutPixels = cuTileRasterFwdRWArgs.outPixels;
 
-		CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource);
-		CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource,
-		                          cuTileRasterPerfQuery);
-
-		CuTileRasterizer::Backward(cuTileRasterBwdROArgs, cuTileRasterBwdRWArgs, cuTileRasterResource);
-		cuperftest::ClearDL_DSplats(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
-		CuTileRasterizer::Backward(cuTileRasterBwdROArgs, cuTileRasterBwdRWArgs, cuTileRasterResource,
-		                           cuTileRasterPerfQuery);
-
-		auto cuTileRasterPerfMetrics = cuTileRasterPerfQuery.GetMetrics();
-		printf("cu_forward: %lf ms (numRendered = %d)\n", cuTileRasterPerfMetrics.forward,
-		       cuTileRasterResource.numRendered);
-		printf("cu_backward: %lf ms\n", cuTileRasterPerfMetrics.backward);
-		printf("cu: %lf ms\n", cuTileRasterPerfMetrics.forward + cuTileRasterPerfMetrics.backward);
-		cuperftest::WritePixelsPNG(entry.imageName + "_cu.png", cuOutPixels, entry.camera.width, entry.camera.height);
-		cuperftest::WriteDL_DSplatsJSON(entry.imageName + "_cu.json", cuTileRasterBwdRWArgs.dL_dSplats,
-		                                std::min(vkGsModel.splatCount, kMaxWriteSplatCount));
-
+		// Vulkan
 		const auto runVkCommand = [&](auto &&cmdRun) {
 			pCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 			cmdRun();
@@ -163,6 +151,10 @@ int main(int argc, char **argv) {
 			pCommandPool->Reset();
 			pFence->Reset();
 		};
+		runVkCommand(
+		    [&] { vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource); });
+		runVkCommand(
+		    [&] { vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource); });
 		runVkCommand([&] {
 			vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource,
 			                        vkRasterPerfQuery);
@@ -172,21 +164,45 @@ int main(int argc, char **argv) {
 			vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource,
 			                         vkRasterPerfQuery);
 		});
-
 		auto vkRasterPerfMetrics = vkRasterPerfQuery.GetMetrics();
 		printf("vk_forward: %lf ms\n", vkRasterPerfMetrics.forward);
 		printf("vk_backward: %lf ms\n", vkRasterPerfMetrics.backward);
 		printf("vk: %lf ms\n", vkRasterPerfMetrics.forward + vkRasterPerfMetrics.backward);
+		if (writeResult) {
+			cuperftest::WritePixelsPNG(entry.imageName + "_vk.png", cuOutPixels, entry.camera.width,
+			                           entry.camera.height);
+			cuperftest::WriteDL_DSplatsJSON(entry.imageName + "_vk.json", cuTileRasterBwdRWArgs.dL_dSplats,
+			                                std::min(vkGsModel.splatCount, kMaxWriteSplatCount));
+		}
 
+		// Cuda
+		CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource);
+		CuTileRasterizer::Backward(cuTileRasterBwdROArgs, cuTileRasterBwdRWArgs, cuTileRasterResource);
+
+		CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource,
+		                          cuTileRasterPerfQuery);
+		cuperftest::ClearDL_DSplats(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
+		CuTileRasterizer::Backward(cuTileRasterBwdROArgs, cuTileRasterBwdRWArgs, cuTileRasterResource,
+		                           cuTileRasterPerfQuery);
+		auto cuTileRasterPerfMetrics = cuTileRasterPerfQuery.GetMetrics();
+		printf("cu_forward: %lf ms (numRendered = %d)\n", cuTileRasterPerfMetrics.forward,
+		       cuTileRasterResource.numRendered);
+		printf("cu_backward: %lf ms\n", cuTileRasterPerfMetrics.backward);
+		printf("cu: %lf ms\n", cuTileRasterPerfMetrics.forward + cuTileRasterPerfMetrics.backward);
+		if (writeResult) {
+			cuperftest::WritePixelsPNG(entry.imageName + "_cu.png", cuOutPixels, entry.camera.width,
+			                           entry.camera.height);
+			cuperftest::WriteDL_DSplatsJSON(entry.imageName + "_cu.json", cuTileRasterBwdRWArgs.dL_dSplats,
+			                                std::min(vkGsModel.splatCount, kMaxWriteSplatCount));
+		}
+
+		// Speed Up
 		printf("speedup_forward: %lf\n", cuTileRasterPerfMetrics.forward / vkRasterPerfMetrics.forward);
 		printf("speedup_backward: %lf\n", cuTileRasterPerfMetrics.backward / vkRasterPerfMetrics.backward);
 		printf("speedup: %lf\n", (cuTileRasterPerfMetrics.forward + cuTileRasterPerfMetrics.backward) /
 		                             (vkRasterPerfMetrics.forward + vkRasterPerfMetrics.backward));
-		cuperftest::WritePixelsPNG(entry.imageName + "_vk.png", cuOutPixels, entry.camera.width, entry.camera.height);
-		cuperftest::WriteDL_DSplatsJSON(entry.imageName + "_vk.json", cuTileRasterBwdRWArgs.dL_dSplats,
-		                                std::min(vkGsModel.splatCount, kMaxWriteSplatCount));
 
-		break; // Only once entry
+		break; // Only run once
 	}
 	return 0;
 }
