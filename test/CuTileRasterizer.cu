@@ -22,6 +22,8 @@ char *CuTileRasterizer::Resource::ResizeableBuffer::Update(std::size_t updateSiz
 		if (data)
 			cudaFree(data);
 		cudaMalloc(&data, updateSize);
+		printf("CuBuffer::Update %zu -> %zu\n", size, updateSize);
+		size = updateSize;
 		cudaCheckError();
 	}
 	return data;
