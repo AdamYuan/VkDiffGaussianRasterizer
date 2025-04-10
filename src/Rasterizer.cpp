@@ -54,6 +54,10 @@ void Rasterizer::Resource::UpdateBuffer(const myvk::Ptr<myvk::Device> &pDevice, 
 }
 void Rasterizer::Resource::UpdateImage(const myvk::Ptr<myvk::Device> &pDevice, uint32_t width, uint32_t height,
                                        const Rasterizer &rasterizer) {
+	if (ResizeImage<VK_FORMAT_D32_SFLOAT>(pDevice, pDepthImage, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, width,
+	                                      height))
+		pDepthImageView = myvk::ImageView::Create(pDepthImage, VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_DEPTH_BIT);
+
 	VkImageUsageFlags usage0 =
 	    VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
 	if (rasterizer.GetConfig().forwardOutputImage)
@@ -62,12 +66,13 @@ void Rasterizer::Resource::UpdateImage(const myvk::Ptr<myvk::Device> &pDevice, u
 		usage0 |= VK_IMAGE_USAGE_SAMPLED_BIT;
 	if (ResizeImage<VK_FORMAT_R32G32B32A32_SFLOAT>(pDevice, pImage0, usage0, width, height))
 		pImageView0 = myvk::ImageView::Create(pImage0, VK_IMAGE_VIEW_TYPE_2D);
-	ResizeFramebuffer(rasterizer.mpForwardRenderPass, {}, pForwardFramebuffer, width, height);
+	ResizeFramebuffer(rasterizer.mpForwardRenderPass, {pDepthImageView}, pForwardFramebuffer, width, height);
 
 	if (ResizeImage<VK_FORMAT_R32G32B32A32_SFLOAT>(
 	        pDevice, pImage1, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT, width, height))
 		pImageView1 = myvk::ImageView::Create(pImage1, VK_IMAGE_VIEW_TYPE_2D);
-	ResizeFramebuffer(rasterizer.mpBackwardRenderPass, {pImageView0}, pBackwardFramebuffer, width, height);
+	ResizeFramebuffer(rasterizer.mpBackwardRenderPass, {pImageView0, pDepthImageView}, pBackwardFramebuffer, width,
+	                  height);
 }
 
 Rasterizer::PerfQuery Rasterizer::PerfQuery::Create(const myvk::Ptr<myvk::Device> &pDevice) {
@@ -268,17 +273,40 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	// Forward RenderPass
 	mpForwardRenderPass = myvk::RenderPass::Create(pDevice, [&] {
 		myvk::RenderPassState2 state;
-		state.SetAttachmentCount(0).SetSubpassCount(1).SetSubpass(0, {}).SetDependencyCount(0);
+		state.SetAttachmentCount(1)
+		    .SetAttachment(
+		        0, VK_FORMAT_D32_SFLOAT, {.op = VK_ATTACHMENT_LOAD_OP_CLEAR},
+		        {.op = VK_ATTACHMENT_STORE_OP_STORE, .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL})
+		    .SetSubpassCount(1)
+		    .SetSubpass(0,
+		                {
+		                    .opt_depth_stencil_attachment_ref =
+		                        myvk::RenderPassState2::SubpassInfo::AttachmentRef{
+		                            .attachment = 0,
+		                            .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+		                        },
+		                })
+		    .SetDependencyCount(1)
+		    .SetSrcExternalDependency(
+		        0,
+		        myvk::GetAttachmentStoreOpSync(VK_IMAGE_ASPECT_DEPTH_BIT, VK_ATTACHMENT_STORE_OP_DONT_CARE) |
+		            myvk::GetAttachmentStoreOpSync(VK_IMAGE_ASPECT_DEPTH_BIT, VK_ATTACHMENT_STORE_OP_STORE),
+		        {.subpass = 0,
+		         .sync = myvk::GetAttachmentLoadOpSync(VK_IMAGE_ASPECT_DEPTH_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR)});
 		return state;
 	}());
 
 	// Backward RenderPass
 	mpBackwardRenderPass = myvk::RenderPass::Create(pDevice, [&] {
 		myvk::RenderPassState2 state;
-		state.SetAttachmentCount(1)
+		state.SetAttachmentCount(2)
 		    .SetAttachment(0, VK_FORMAT_R32G32B32A32_SFLOAT,
 		                   {.op = VK_ATTACHMENT_LOAD_OP_NONE_EXT, .layout = VK_IMAGE_LAYOUT_GENERAL},
 		                   {.op = VK_ATTACHMENT_STORE_OP_NONE, .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+		    .SetAttachment(
+		        1, VK_FORMAT_D32_SFLOAT,
+		        {.op = VK_ATTACHMENT_LOAD_OP_LOAD, .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL},
+		        {.op = VK_ATTACHMENT_STORE_OP_DONT_CARE, .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL})
 		    .SetSubpassCount(1)
 		    .SetSubpass(0,
 		                {
@@ -290,8 +318,13 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 		                                .aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT,
 		                            },
 		                        },
+		                    .opt_depth_stencil_attachment_ref =
+		                        myvk::RenderPassState2::SubpassInfo::AttachmentRef{
+		                            .attachment = 1,
+		                            .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+		                        },
 		                })
-		    .SetDependencyCount(1)
+		    .SetDependencyCount(2)
 		    .SetSrcExternalDependency(0,
 		                              {
 		                                  // BackwardCopy
@@ -306,7 +339,12 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 		                                          VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
 		                                          VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT,
 		                                      },
-		                              });
+		                              })
+		    .SetSrcExternalDependency(
+		        1, myvk::GetAttachmentStoreOpSync(VK_IMAGE_ASPECT_DEPTH_BIT, VK_ATTACHMENT_STORE_OP_STORE),
+		        {.subpass = 0,
+		         .sync = myvk::GetAttachmentLoadOpSync(VK_IMAGE_ASPECT_DEPTH_BIT, VK_ATTACHMENT_LOAD_OP_LOAD)});
+		;
 		return state;
 	}());
 
@@ -331,6 +369,7 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 		    state.m_input_assembly_state.Enable(VK_PRIMITIVE_TOPOLOGY_POINT_LIST);
 		    state.m_rasterization_state.Initialize(VK_POLYGON_MODE_FILL, VK_FRONT_FACE_CLOCKWISE, VK_CULL_MODE_NONE);
 		    state.m_multisample_state.Enable(VK_SAMPLE_COUNT_1_BIT);
+		    state.m_depth_stencil_state.Enable(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS);
 		    return state;
 	    }(),
 	    0);
@@ -353,6 +392,7 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 		    state.m_input_assembly_state.Enable(VK_PRIMITIVE_TOPOLOGY_POINT_LIST);
 		    state.m_rasterization_state.Initialize(VK_POLYGON_MODE_FILL, VK_FRONT_FACE_CLOCKWISE, VK_CULL_MODE_NONE);
 		    state.m_multisample_state.Enable(VK_SAMPLE_COUNT_1_BIT);
+		    state.m_depth_stencil_state.Enable(VK_TRUE, VK_FALSE, VK_COMPARE_OP_LESS);
 		    return state;
 	    }(),
 	    0);
@@ -386,6 +426,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 
 	    // Draw Args
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pDrawArgBuffer, SBUF_DRAW_ARGS_BINDING),
+	    myvk::DescriptorSetWrite::WriteUniformBuffer(nullptr, resource.pDrawArgBuffer, UBUF_SORT_COUNT_BINDING),
 
 	    // Images
 	    myvk::DescriptorSetWrite::WriteStorageImage(nullptr, resource.pImageView0, SIMG_IMAGE0_BINDING),
@@ -419,7 +460,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	        resource.pDrawArgBuffer->GetMemoryBarrier2(
 	            // VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT reads as DrawArg (ForwardDraw | BackwardDraw)
 	            // VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT reads as UniformBuffer (BackwardReset | BackwardView)
-	            // VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT reads as UniformBuffer (BackwardDraw.geom)
+	            // VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT reads as UniformBuffer (ForwardDraw.geom | BackwardDraw.geom)
 	            // DeviceSorter reads
 	            {VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
 	                 VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT | DeviceSorter::GetROArgsSync().countBuffer.stage_mask,
@@ -486,7 +527,8 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	            DeviceSorter::GetROArgsSync().countBuffer |
 	                // VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT reads as DrawArg (ForwardDraw | BackwardDraw)
 	                // VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT reads as UniformBuffer (BackwardReset | BackwardView)
-	                // VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT reads as UniformBuffer (BackwardDraw.geom)
+	                // VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT reads as UniformBuffer (ForwardDraw.geom |
+	                // BackwardDraw.geom)
 	                myvk::BufferSyncState{
 	                    VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
 	                        VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT,
@@ -566,15 +608,16 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	                VK_IMAGE_LAYOUT_GENERAL,
 	            }),
 	    });
-	pCommandBuffer->CmdBeginRenderPass(mpForwardRenderPass, resource.pForwardFramebuffer, {});
+	pCommandBuffer->CmdBeginRenderPass(mpForwardRenderPass, resource.pForwardFramebuffer,
+	                                   {VkClearValue{.depthStencil = {.depth = 1.0f}}});
 	pCommandBuffer->CmdBindPipeline(mpForwardDrawPipeline);
 	pCommandBuffer->CmdSetViewport({VkViewport{
 	    .x = 0,
 	    .y = 0,
 	    .width = (float)roArgs.camera.width,
 	    .height = (float)roArgs.camera.height,
-	    .minDepth = 0,
-	    .maxDepth = 0,
+	    .minDepth = 0.0f,
+	    .maxDepth = 1.0f,
 	}});
 	pCommandBuffer->CmdSetScissor({VkRect2D{
 	    .offset = {},
@@ -799,8 +842,8 @@ void Rasterizer::CmdBackward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffe
 	    .y = 0,
 	    .width = (float)roArgs.fwd.camera.width,
 	    .height = (float)roArgs.fwd.camera.height,
-	    .minDepth = 0,
-	    .maxDepth = 0,
+	    .minDepth = 0.0f,
+	    .maxDepth = 1.0f,
 	}});
 	pCommandBuffer->CmdSetScissor({VkRect2D{
 	    .offset = {},

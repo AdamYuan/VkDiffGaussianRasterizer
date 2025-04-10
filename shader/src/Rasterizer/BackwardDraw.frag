@@ -23,7 +23,7 @@ gIn;
 layout(rgba32f, binding = SIMG_IMAGE0_BINDING) coherent uniform image2D gMs_Rs;
 layout(input_attachment_index = 0, binding = IATT_IMAGE0_BINDING) uniform subpassInput gDL_DPixels_Ts;
 
-layout(pixel_interlock_ordered, full_quads) in;
+layout(pixel_interlock_ordered, full_quads, early_fragment_tests) in;
 
 #define BALANCING_THRESHOLD 16
 
@@ -46,11 +46,15 @@ void main() {
 
 	ivec2 coord = ivec2(gl_FragCoord.xy);
 
+	vec4 Mi_Ri, Mi_1_Ri_1;
+
 	beginInvocationInterlockARB();
-	vec4 Mi_Ri = imageLoad(gMs_Rs, coord);  // M_i, R_i
-	vec4 Mi_1_Ri_1 = Mi_Ri * oneMinusAlpha; // M_{i - 1}, R_{i - 1}
-	Mi_1_Ri_1.xyz += alphaColor;
-	imageStore(gMs_Rs, coord, Mi_1_Ri_1);
+	if (!pixelDiscard) {
+		Mi_Ri = imageLoad(gMs_Rs, coord);  // M_i, R_i
+		Mi_1_Ri_1 = Mi_Ri * oneMinusAlpha; // M_{i - 1}, R_{i - 1}
+		Mi_1_Ri_1.xyz += alphaColor;
+		imageStore(gMs_Rs, coord, Mi_1_Ri_1);
+	}
 	endInvocationInterlockARB();
 
 	if (quadDiscard)

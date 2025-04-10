@@ -32,11 +32,7 @@ void main() {
 	if (subgroupAllEqual(gIn.sortIdx))
 		alpha = 0;
 #endif
-	// if (alpha < ALPHA_MIN)
-	// 	discard;
 	bool pixelDiscard = alpha < ALPHA_MIN;
-	if (subgroupQuadAll(pixelDiscard))
-		discard;
 
 	if (pixelDiscard)
 		alpha = 0;
@@ -47,13 +43,20 @@ void main() {
 
 	ivec2 coord = ivec2(gl_FragCoord.xy);
 
+	bool depthDiscard = pixelDiscard;
+
 	beginInvocationInterlockARB();
-	vec4 color_T = imageLoad(gColors_Ts, coord);
-	float test_T = color_T.w * oneMinusAlpha;
-	if (test_T >= T_MIN) {
-		color_T.xyz += alphaColor * color_T.w;
-		color_T.w = test_T;
-		imageStore(gColors_Ts, coord, color_T);
+	if (!pixelDiscard) {
+		vec4 color_T = imageLoad(gColors_Ts, coord);
+		depthDiscard = color_T.w >= T_MIN;
+		if (depthDiscard) {
+			color_T.xyz += alphaColor * color_T.w;
+			color_T.w *= oneMinusAlpha;
+			imageStore(gColors_Ts, coord, color_T);
+		}
 	}
 	endInvocationInterlockARB();
+
+	if (depthDiscard)
+		discard; // Discard Depth Write
 }
