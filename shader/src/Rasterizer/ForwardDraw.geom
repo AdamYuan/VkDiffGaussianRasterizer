@@ -6,8 +6,14 @@
 
 // #define DEBUG_SUBGROUP
 
+#define VERT_NUM 5
+const vec2[VERT_NUM] kVerts = {
+    vec2(1.000000, 0.726543),  vec2(-0.381966, 1.175570),  vec2(1.000000, -0.726543),
+    vec2(-1.236068, 0.000000), vec2(-0.381966, -1.175570),
+};
+
 layout(points) in;
-layout(triangle_strip, max_vertices = 4) out;
+layout(triangle_strip, max_vertices = VERT_NUM) out;
 
 in bIn { layout(location = 0) uint instanceID; }
 gIn[];
@@ -36,41 +42,17 @@ void main() {
 	vec2 axisClip1 = axis2D2clip(splatQuad.axis1, camera);
 	vec2 axisClip2 = axis2D2clip(splatQuad.axis2, camera);
 
-	gOut.opacity = splatView.geom.opacity;
-	gOut.color = splatView.color;
-	gOut.quadPos = vec2(-quadBound, -quadBound);
+	[[unroll]]
+	for (uint i = 0; i < VERT_NUM; ++i) {
+		gOut.opacity = splatView.geom.opacity;
+		gOut.color = splatView.color;
+		gOut.quadPos = kVerts[i] * quadBound;
 #ifdef DEBUG_SUBGROUP
-	gOut.sortIdx = sortIdx;
+		gOut.sortIdx = sortIdx;
 #endif
-	gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, 0, 1);
-	EmitVertex();
-
-	gOut.opacity = splatView.geom.opacity;
-	gOut.color = splatView.color;
-	gOut.quadPos = vec2(quadBound, -quadBound);
-#ifdef DEBUG_SUBGROUP
-	gOut.sortIdx = sortIdx;
-#endif
-	gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, 0, 1);
-	EmitVertex();
-
-	gOut.opacity = splatView.geom.opacity;
-	gOut.color = splatView.color;
-	gOut.quadPos = vec2(-quadBound, quadBound);
-#ifdef DEBUG_SUBGROUP
-	gOut.sortIdx = sortIdx;
-#endif
-	gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, 0, 1);
-	EmitVertex();
-
-	gOut.opacity = splatView.geom.opacity;
-	gOut.color = splatView.color;
-	gOut.quadPos = vec2(quadBound, quadBound);
-#ifdef DEBUG_SUBGROUP
-	gOut.sortIdx = sortIdx;
-#endif
-	gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, 0, 1);
-	EmitVertex();
+		gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, 0, 1);
+		EmitVertex();
+	}
 
 	EndPrimitive();
 }
