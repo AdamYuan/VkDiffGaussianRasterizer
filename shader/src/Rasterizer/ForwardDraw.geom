@@ -6,10 +6,12 @@
 
 // #define DEBUG_SUBGROUP
 
-#define VERT_NUM 5
+#define VERT_NUM 4
 const vec2[VERT_NUM] kVerts = {
-    vec2(1.000000, 0.726543),  vec2(-0.381966, 1.175570),  vec2(1.000000, -0.726543),
-    vec2(-1.236068, 0.000000), vec2(-0.381966, -1.175570),
+    vec2(1.000000, 1.000000),
+    vec2(-1.000000, 1.000000),
+    vec2(1.000000, -1.000000),
+    vec2(-1.000000, -1.000000),
 };
 
 layout(points) in;
