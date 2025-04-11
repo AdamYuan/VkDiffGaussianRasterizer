@@ -31,7 +31,7 @@ gOut;
 layout(std430, binding = SBUF_SORT_PAYLOADS_BINDING) readonly buffer bSortPayloads { uint gSortPayloads[]; };
 
 void main() {
-	uint orderIdx = gIn[0].instanceID;
+	uint orderIdx = gSplatSortCount - 1 - gIn[0].instanceID;
 	uint sortIdx = gSortPayloads[orderIdx];
 	SplatView splatView = loadSplatView(sortIdx);
 	SplatQuad splatQuad = loadSplatQuad(sortIdx);
@@ -43,8 +43,6 @@ void main() {
 	vec2 axisClip1 = axis2D2clip(splatQuad.axis1, camera);
 	vec2 axisClip2 = axis2D2clip(splatQuad.axis2, camera);
 
-	float depth = float(orderIdx) / float(gSplatSortCount);
-
 	[[unroll]]
 	for (uint i = 0; i < VERT_NUM; ++i) {
 		gOut.opacity = splatView.geom.opacity;
@@ -53,7 +51,7 @@ void main() {
 #ifdef DEBUG_SUBGROUP
 		gOut.sortIdx = sortIdx;
 #endif
-		gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, depth, 1);
+		gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, 0, 1);
 		EmitVertex();
 	}
 

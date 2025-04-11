@@ -109,9 +109,6 @@ public:
 		myvk::Ptr<myvk::ImageBase> pPixelTImage, pDL_DPixelImage; // W * H * [float4]
 		myvk::Ptr<myvk::ImageView> pPixelTImageView, pDL_DPixelImageView;
 
-		myvk::Ptr<myvk::ImageBase> pDepthImage; // W * H * [float]
-		myvk::Ptr<myvk::ImageView> pDepthImageView;
-
 		myvk::Ptr<myvk::Framebuffer> pForwardFramebuffer, pBackwardFramebuffer;
 
 		void UpdateBuffer(const myvk::Ptr<myvk::Device> &pDevice, uint32_t splatCount, double growFactor = 1.5);

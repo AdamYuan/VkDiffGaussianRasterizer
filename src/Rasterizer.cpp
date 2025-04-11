@@ -66,10 +66,6 @@ void Rasterizer::Resource::UpdateBuffer(const myvk::Ptr<myvk::Device> &pDevice, 
 }
 void Rasterizer::Resource::UpdateImage(const myvk::Ptr<myvk::Device> &pDevice, uint32_t width, uint32_t height,
                                        const Rasterizer &rasterizer) {
-	if (ResizeImage<VK_FORMAT_D32_SFLOAT>(pDevice, pDepthImage, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, width,
-	                                      height))
-		pDepthImageView = myvk::ImageView::Create(pDepthImage, VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_DEPTH_BIT);
-
 	if (ResizeImage<kPixelTImageFormat>(
 	        pDevice, pPixelTImage,
 	        [&] {
@@ -87,9 +83,8 @@ void Rasterizer::Resource::UpdateImage(const myvk::Ptr<myvk::Device> &pDevice, u
 	        pDevice, pDL_DPixelImage, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT, width, height))
 		pDL_DPixelImageView = myvk::ImageView::Create(pDL_DPixelImage, VK_IMAGE_VIEW_TYPE_2D);
 
-	ResizeFramebuffer(rasterizer.mpForwardRenderPass, {pDepthImageView}, pForwardFramebuffer, width, height);
-	ResizeFramebuffer(rasterizer.mpBackwardRenderPass, {pDL_DPixelImageView, pDepthImageView}, pBackwardFramebuffer,
-	                  width, height);
+	ResizeFramebuffer(rasterizer.mpForwardRenderPass, {pPixelTImageView}, pForwardFramebuffer, width, height);
+	ResizeFramebuffer(rasterizer.mpBackwardRenderPass, {pDL_DPixelImageView}, pBackwardFramebuffer, width, height);
 }
 
 Rasterizer::PerfQuery Rasterizer::PerfQuery::Create(const myvk::Ptr<myvk::Device> &pDevice) {
@@ -295,25 +290,42 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	mpForwardRenderPass = myvk::RenderPass::Create(pDevice, [&] {
 		myvk::RenderPassState2 state;
 		state.SetAttachmentCount(1)
-		    .SetAttachment(
-		        0, VK_FORMAT_D32_SFLOAT, {.op = VK_ATTACHMENT_LOAD_OP_CLEAR},
-		        {.op = VK_ATTACHMENT_STORE_OP_STORE, .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL})
+		    .SetAttachment(0, kPixelTImageFormat, {.op = VK_ATTACHMENT_LOAD_OP_CLEAR},
+		                   {.op = VK_ATTACHMENT_STORE_OP_STORE,
+		                    .layout = mConfig.forwardOutputImage ? VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+		                                                         : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
 		    .SetSubpassCount(1)
 		    .SetSubpass(0,
 		                {
-		                    .opt_depth_stencil_attachment_ref =
-		                        myvk::RenderPassState2::SubpassInfo::AttachmentRef{
-		                            .attachment = 0,
-		                            .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+		                    .color_attachment_refs =
+		                        {
+		                            {
+		                                .attachment = 0,
+		                                .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+		                            },
 		                        },
 		                })
-		    .SetDependencyCount(1)
+		    .SetDependencyCount(2)
 		    .SetSrcExternalDependency(
 		        0,
-		        myvk::GetAttachmentStoreOpSync(VK_IMAGE_ASPECT_DEPTH_BIT, VK_ATTACHMENT_STORE_OP_DONT_CARE) |
-		            myvk::GetAttachmentStoreOpSync(VK_IMAGE_ASPECT_DEPTH_BIT, VK_ATTACHMENT_STORE_OP_STORE),
+		        // VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT write as StorageImage (BackwardDraw.frag)
+		        {
+		            VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
+		                // Blit or ForwardCopy read
+		                (mConfig.forwardOutputImage ? VK_PIPELINE_STAGE_2_BLIT_BIT
+		                                            : VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT),
+		            VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+		        },
 		        {.subpass = 0,
-		         .sync = myvk::GetAttachmentLoadOpSync(VK_IMAGE_ASPECT_DEPTH_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR)});
+		         .sync = myvk::GetAttachmentLoadOpSync(VK_IMAGE_ASPECT_COLOR_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR)})
+		    .SetDstExternalDependency(
+		        1,
+		        {.subpass = 1,
+		         .sync = myvk::GetAttachmentStoreOpSync(VK_IMAGE_ASPECT_COLOR_BIT, VK_ATTACHMENT_STORE_OP_STORE)},
+		        mConfig.forwardOutputImage
+		            ? myvk::MemorySyncState{VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT}
+		            : myvk::MemorySyncState{VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+		                                    VK_ACCESS_2_SHADER_STORAGE_READ_BIT});
 		return state;
 	}());
 
@@ -384,13 +396,24 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	    [] {
 		    myvk::GraphicsPipelineState state{};
 		    state.m_dynamic_state.Enable({VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
-		    state.m_color_blend_state.Enable(0, VK_FALSE);
+		    state.m_color_blend_state.Enable({
+		        VkPipelineColorBlendAttachmentState{
+		            .blendEnable = VK_TRUE,
+		            .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+		            .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+		            .colorBlendOp = VK_BLEND_OP_ADD,
+		            .srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+		            .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+		            .alphaBlendOp = VK_BLEND_OP_ADD,
+		            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
+		                              VK_COLOR_COMPONENT_A_BIT,
+		        },
+		    });
 		    state.m_viewport_state.Enable();
 		    state.m_vertex_input_state.Enable();
 		    state.m_input_assembly_state.Enable(VK_PRIMITIVE_TOPOLOGY_POINT_LIST);
 		    state.m_rasterization_state.Initialize(VK_POLYGON_MODE_FILL, VK_FRONT_FACE_CLOCKWISE, VK_CULL_MODE_NONE);
 		    state.m_multisample_state.Enable(VK_SAMPLE_COUNT_1_BIT);
-		    state.m_depth_stencil_state.Enable(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS);
 		    return state;
 	    }(),
 	    0);
@@ -413,7 +436,6 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 		    state.m_input_assembly_state.Enable(VK_PRIMITIVE_TOPOLOGY_POINT_LIST);
 		    state.m_rasterization_state.Initialize(VK_POLYGON_MODE_FILL, VK_FRONT_FACE_CLOCKWISE, VK_CULL_MODE_NONE);
 		    state.m_multisample_state.Enable(VK_SAMPLE_COUNT_1_BIT);
-		    state.m_depth_stencil_state.Enable(VK_TRUE, VK_FALSE, VK_COMPARE_OP_LESS);
 		    return state;
 	    }(),
 	    0);
@@ -601,35 +623,9 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	    },
 	    {});
 
-	// Clear Image0
-	pCommandBuffer->CmdPipelineBarrier2(
-	    {}, {},
-	    {
-	        resource.pPixelTImage->GetMemoryBarrier2(
-	            {// Last Read in Forward (CmdBlit or ForwardCopy)
-	             (mConfig.forwardOutputImage ? VK_PIPELINE_STAGE_2_BLIT_BIT : VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-	                 // Last Read & Write in Backward (BackwardDraw)
-	                 | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-	             VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
-	            {VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL}),
-	    });
-	pCommandBuffer->CmdClearColorImage(resource.pPixelTImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-	                                   {0.0f, 0.0f, 0.0f, 1.0f});
-
 	// ForwardDraw
-	pCommandBuffer->CmdPipelineBarrier2(
-	    {}, {},
-	    {
-	        resource.pPixelTImage->GetMemoryBarrier2(
-	            {VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
-	            {
-	                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-	                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-	                VK_IMAGE_LAYOUT_GENERAL,
-	            }),
-	    });
 	pCommandBuffer->CmdBeginRenderPass(mpForwardRenderPass, resource.pForwardFramebuffer,
-	                                   {VkClearValue{.depthStencil = {.depth = 1.0f}}});
+	                                   {VkClearValue{.color = {0.0f, 0.0f, 0.0f, 1.0f}}});
 	pCommandBuffer->CmdBindPipeline(mpForwardDrawPipeline);
 	pCommandBuffer->CmdSetViewport({VkViewport{
 	    .x = 0,
@@ -648,20 +644,6 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	pCommandBuffer->CmdEndRenderPass();
 
 	if (mConfig.forwardOutputImage) {
-		pCommandBuffer->CmdPipelineBarrier2({}, {},
-		                                    {
-		                                        resource.pPixelTImage->GetMemoryBarrier2(
-		                                            {
-		                                                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-		                                                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-		                                                VK_IMAGE_LAYOUT_GENERAL,
-		                                            },
-		                                            {
-		                                                VK_PIPELINE_STAGE_2_BLIT_BIT,
-		                                                VK_ACCESS_2_TRANSFER_READ_BIT,
-		                                                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-		                                            }),
-		                                    });
 		pCommandBuffer->CmdBlitImage(resource.pPixelTImage, rwArgs.pOutPixelImage,
 		                             {
 		                                 .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
@@ -671,20 +653,6 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 		                             },
 		                             VK_FILTER_NEAREST);
 	} else {
-		pCommandBuffer->CmdPipelineBarrier2({}, {},
-		                                    {
-		                                        resource.pPixelTImage->GetMemoryBarrier2(
-		                                            {
-		                                                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-		                                                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-		                                                VK_IMAGE_LAYOUT_GENERAL,
-		                                            },
-		                                            {
-		                                                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-		                                                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-		                                                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		                                            }),
-		                                    });
 		pCommandBuffer->CmdBindPipeline(mpForwardCopyPipeline);
 		pCommandBuffer->CmdDispatch((roArgs.camera.width + FORWARD_COPY_DIM_X - 1) / FORWARD_COPY_DIM_X,
 		                            (roArgs.camera.height + FORWARD_COPY_DIM_Y - 1) / FORWARD_COPY_DIM_Y, 1u);

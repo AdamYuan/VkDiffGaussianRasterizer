@@ -22,9 +22,9 @@ in bIn {
 }
 gIn;
 
-layout(PIXEL_T_FORMAT_IDENTIFIER, binding = SIMG_PIXELS_TS_BINDING) coherent uniform image2D gPixels_Ts;
+layout(full_quads) in;
 
-layout(pixel_interlock_ordered, full_quads) in;
+layout(location = 0) out vec4 gOutFragColor;
 
 void main() {
 	float alpha = quadPos2alpha(gIn.quadPos, gIn.opacity);
@@ -33,30 +33,9 @@ void main() {
 		alpha = 0;
 #endif
 	bool pixelDiscard = alpha < ALPHA_MIN;
-
 	if (pixelDiscard)
-		alpha = 0;
+		discard;
 
 	alpha = min(alpha, ALPHA_MAX);
-	float oneMinusAlpha = 1.0 - alpha;
-	vec3 alphaColor = alpha * gIn.color;
-
-	ivec2 coord = ivec2(gl_FragCoord.xy);
-
-	bool depthDiscard = pixelDiscard;
-
-	beginInvocationInterlockARB();
-	if (!pixelDiscard) {
-		vec4 pixel_T = imageLoad(gPixels_Ts, coord);
-		depthDiscard = pixel_T.w >= T_MIN;
-		if (depthDiscard) {
-			pixel_T.xyz += alphaColor * pixel_T.w;
-			pixel_T.w *= oneMinusAlpha;
-			imageStore(gPixels_Ts, coord, pixel_T);
-		}
-	}
-	endInvocationInterlockARB();
-
-	if (depthDiscard)
-		discard; // Discard Depth Write
+	gOutFragColor = vec4(gIn.color, alpha);
 }

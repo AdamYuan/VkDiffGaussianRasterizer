@@ -23,7 +23,7 @@ gIn;
 layout(PIXEL_T_FORMAT_IDENTIFIER, binding = SIMG_PIXELS_TS_BINDING) coherent uniform image2D gPixels_Ts;
 layout(input_attachment_index = 0, binding = IATT_DL_DPIXELS_BINDING) uniform subpassInput gDL_DPixels_Ts;
 
-layout(pixel_interlock_ordered, full_quads, early_fragment_tests) in;
+layout(pixel_interlock_ordered, full_quads) in;
 
 #define BALANCING_THRESHOLD 16
 
@@ -31,8 +31,7 @@ void main() {
 	float G;
 	float alpha = quadPos2alpha(gIn.quadPos, gIn.opacity, G);
 	bool pixelDiscard = alpha < ALPHA_MIN || gl_HelperInvocation;
-	bool quadDiscard = subgroupQuadAll(pixelDiscard);
-	if (quadDiscard)
+	if (subgroupQuadAll(pixelDiscard))
 		discard;
 
 	if (pixelDiscard)
@@ -47,20 +46,26 @@ void main() {
 	ivec2 coord = ivec2(gl_FragCoord.xy);
 
 	float T_i, T_i1; // T_i, T_{i+1}
-	vec3 pixel_i, pixel_i1;
+	vec3 pixel_i1;
+
+	bool TDiscard = false;
 
 	beginInvocationInterlockARB();
 	if (!pixelDiscard) {
 		vec4 pixel_T = imageLoad(gPixels_Ts, coord);
-		pixel_i = pixel_T.xyz;
+		vec3 pixel_i = pixel_T.xyz;
 		T_i = pixel_T.w;
-		pixel_i1 = pixel_i - T_i * alphaColor;
-		T_i1 = T_i * oneMinusAlpha;
-		imageStore(gPixels_Ts, coord, vec4(pixel_i1, T_i1));
+		TDiscard = T_i < T_MIN;
+		if (!TDiscard) {
+			T_i1 = T_i * oneMinusAlpha;
+			pixel_i1 = pixel_i - T_i * alphaColor;
+			imageStore(gPixels_Ts, coord, vec4(pixel_i1, T_i1));
+		}
 	}
 	endInvocationInterlockARB();
 
-	if (quadDiscard)
+	pixelDiscard = pixelDiscard || TDiscard;
+	if (subgroupQuadAll(pixelDiscard))
 		return;
 
 	vec3 dL_dPixel = dL_dPixel_T.xyz;
