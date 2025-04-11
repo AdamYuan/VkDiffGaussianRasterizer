@@ -1,5 +1,4 @@
 #version 460
-#extension GL_ARB_fragment_shader_interlock : require
 #extension GL_KHR_shader_subgroup_vote : require
 #extension GL_KHR_shader_subgroup_quad : require
 #extension GL_EXT_shader_quad_control : require
@@ -21,8 +20,6 @@ in bIn {
 #endif
 }
 gIn;
-
-layout(full_quads) in;
 
 layout(location = 0) out vec4 gOutFragColor;
 
