@@ -106,8 +106,8 @@ public:
 		myvk::Ptr<myvk::BufferBase> pDrawArgBuffer;     // uint4
 		myvk::Ptr<myvk::BufferBase> pDispatchArgBuffer; // uint3
 
-		myvk::Ptr<myvk::ImageBase> pImage0, pImage1; // W * H * [float4]
-		myvk::Ptr<myvk::ImageView> pImageView0, pImageView1;
+		myvk::Ptr<myvk::ImageBase> pPixelTImage, pDL_DPixelImage; // W * H * [float4]
+		myvk::Ptr<myvk::ImageView> pPixelTImageView, pDL_DPixelImageView;
 
 		myvk::Ptr<myvk::ImageBase> pDepthImage; // W * H * [float]
 		myvk::Ptr<myvk::ImageView> pDepthImageView;

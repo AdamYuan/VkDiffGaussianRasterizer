@@ -22,7 +22,7 @@ in bIn {
 }
 gIn;
 
-layout(PIXEL_T_FORMAT_IDENTIFIER, binding = SIMG_IMAGE0_BINDING) coherent uniform image2D gPixels_Ts;
+layout(PIXEL_T_FORMAT_IDENTIFIER, binding = SIMG_PIXELS_TS_BINDING) coherent uniform image2D gPixels_Ts;
 
 layout(pixel_interlock_ordered, full_quads) in;
 

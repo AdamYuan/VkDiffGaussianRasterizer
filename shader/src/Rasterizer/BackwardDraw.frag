@@ -20,8 +20,8 @@ in bIn {
 }
 gIn;
 
-layout(PIXEL_T_FORMAT_IDENTIFIER, binding = SIMG_IMAGE0_BINDING) coherent uniform image2D gPixels_Ts;
-layout(input_attachment_index = 0, binding = IATT_IMAGE0_BINDING) uniform subpassInput gDL_DPixels_Ts;
+layout(PIXEL_T_FORMAT_IDENTIFIER, binding = SIMG_PIXELS_TS_BINDING) coherent uniform image2D gPixels_Ts;
+layout(input_attachment_index = 0, binding = IATT_DL_DPIXELS_BINDING) uniform subpassInput gDL_DPixels_Ts;
 
 layout(pixel_interlock_ordered, full_quads, early_fragment_tests) in;
 

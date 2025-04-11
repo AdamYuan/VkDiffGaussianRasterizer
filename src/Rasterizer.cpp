@@ -70,21 +70,26 @@ void Rasterizer::Resource::UpdateImage(const myvk::Ptr<myvk::Device> &pDevice, u
 	                                      height))
 		pDepthImageView = myvk::ImageView::Create(pDepthImage, VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_DEPTH_BIT);
 
-	VkImageUsageFlags usage0 = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-	if (rasterizer.GetConfig().forwardOutputImage)
-		usage0 |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-	else
-		usage0 |= VK_IMAGE_USAGE_SAMPLED_BIT;
-	if (ResizeImage<kPixelTImageFormat>(pDevice, pImage0, usage0, width, height))
-		pImageView0 = myvk::ImageView::Create(pImage0, VK_IMAGE_VIEW_TYPE_2D);
+	if (ResizeImage<kPixelTImageFormat>(
+	        pDevice, pPixelTImage,
+	        [&] {
+		        VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+		        if (rasterizer.GetConfig().forwardOutputImage)
+			        usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+		        else
+			        usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+		        return usage;
+	        }(),
+	        width, height))
+		pPixelTImageView = myvk::ImageView::Create(pPixelTImage, VK_IMAGE_VIEW_TYPE_2D);
 
 	if (ResizeImage<VK_FORMAT_R32G32B32A32_SFLOAT>(
-	        pDevice, pImage1, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT, width, height))
-		pImageView1 = myvk::ImageView::Create(pImage1, VK_IMAGE_VIEW_TYPE_2D);
+	        pDevice, pDL_DPixelImage, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT, width, height))
+		pDL_DPixelImageView = myvk::ImageView::Create(pDL_DPixelImage, VK_IMAGE_VIEW_TYPE_2D);
 
 	ResizeFramebuffer(rasterizer.mpForwardRenderPass, {pDepthImageView}, pForwardFramebuffer, width, height);
-	ResizeFramebuffer(rasterizer.mpBackwardRenderPass, {pImageView1, pDepthImageView}, pBackwardFramebuffer, width,
-	                  height);
+	ResizeFramebuffer(rasterizer.mpBackwardRenderPass, {pDL_DPixelImageView, pDepthImageView}, pBackwardFramebuffer,
+	                  width, height);
 }
 
 Rasterizer::PerfQuery Rasterizer::PerfQuery::Create(const myvk::Ptr<myvk::Device> &pDevice) {
@@ -213,19 +218,19 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	         .stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_COMPUTE_BIT},
 
 	        // Images
-	        {.binding = SIMG_IMAGE0_BINDING,
+	        {.binding = SIMG_PIXELS_TS_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 	         .descriptorCount = 1u,
 	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT},
-	        {.binding = SIMG_IMAGE1_BINDING,
+	        {.binding = SIMG_DL_DPIXELS_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 	         .descriptorCount = 1u,
 	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
-	        {.binding = TEX_IMAGE0_BINDING,
+	        {.binding = TEX_PIXELS_TS_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
 	         .descriptorCount = 1u,
 	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
-	        {.binding = IATT_IMAGE0_BINDING,
+	        {.binding = IATT_DL_DPIXELS_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
 	         .descriptorCount = 1u,
 	         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
@@ -445,11 +450,11 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	    myvk::DescriptorSetWrite::WriteUniformBuffer(nullptr, resource.pDrawArgBuffer, UBUF_SORT_COUNT_BINDING),
 
 	    // Images
-	    myvk::DescriptorSetWrite::WriteStorageImage(nullptr, resource.pImageView0, SIMG_IMAGE0_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageImage(nullptr, resource.pPixelTImageView, SIMG_PIXELS_TS_BINDING),
 	};
 	if (!mConfig.forwardOutputImage) {
 		descriptorSetWrites.push_back(
-		    myvk::DescriptorSetWrite::WriteSampledImage(nullptr, resource.pImageView0, TEX_IMAGE0_BINDING));
+		    myvk::DescriptorSetWrite::WriteSampledImage(nullptr, resource.pPixelTImageView, TEX_PIXELS_TS_BINDING));
 		descriptorSetWrites.push_back(
 		    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, rwArgs.pOutPixelBuffer, SBUF_PIXELS_BINDING));
 	}
@@ -600,7 +605,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	pCommandBuffer->CmdPipelineBarrier2(
 	    {}, {},
 	    {
-	        resource.pImage0->GetMemoryBarrier2(
+	        resource.pPixelTImage->GetMemoryBarrier2(
 	            {// Last Read in Forward (CmdBlit or ForwardCopy)
 	             (mConfig.forwardOutputImage ? VK_PIPELINE_STAGE_2_BLIT_BIT : VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
 	                 // Last Read & Write in Backward (BackwardDraw)
@@ -608,14 +613,14 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	             VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
 	            {VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL}),
 	    });
-	pCommandBuffer->CmdClearColorImage(resource.pImage0, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+	pCommandBuffer->CmdClearColorImage(resource.pPixelTImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 	                                   {0.0f, 0.0f, 0.0f, 1.0f});
 
 	// ForwardDraw
 	pCommandBuffer->CmdPipelineBarrier2(
 	    {}, {},
 	    {
-	        resource.pImage0->GetMemoryBarrier2(
+	        resource.pPixelTImage->GetMemoryBarrier2(
 	            {VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
 	            {
 	                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
@@ -645,7 +650,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	if (mConfig.forwardOutputImage) {
 		pCommandBuffer->CmdPipelineBarrier2({}, {},
 		                                    {
-		                                        resource.pImage0->GetMemoryBarrier2(
+		                                        resource.pPixelTImage->GetMemoryBarrier2(
 		                                            {
 		                                                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
 		                                                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
@@ -657,7 +662,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 		                                                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 		                                            }),
 		                                    });
-		pCommandBuffer->CmdBlitImage(resource.pImage0, rwArgs.pOutPixelImage,
+		pCommandBuffer->CmdBlitImage(resource.pPixelTImage, rwArgs.pOutPixelImage,
 		                             {
 		                                 .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
 		                                 .srcOffsets = {{}, {(int)roArgs.camera.width, (int)roArgs.camera.height, 1u}},
@@ -668,7 +673,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	} else {
 		pCommandBuffer->CmdPipelineBarrier2({}, {},
 		                                    {
-		                                        resource.pImage0->GetMemoryBarrier2(
+		                                        resource.pPixelTImage->GetMemoryBarrier2(
 		                                            {
 		                                                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
 		                                                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
@@ -716,9 +721,9 @@ void Rasterizer::CmdBackward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffe
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pDispatchArgBuffer, SBUF_DISPATCH_ARGS_BINDING),
 
 	    // Images
-	    myvk::DescriptorSetWrite::WriteStorageImage(nullptr, resource.pImageView0, SIMG_IMAGE0_BINDING),
-	    myvk::DescriptorSetWrite::WriteStorageImage(nullptr, resource.pImageView1, SIMG_IMAGE1_BINDING),
-	    myvk::DescriptorSetWrite::WriteInputAttachment(nullptr, resource.pImageView1, IATT_IMAGE0_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageImage(nullptr, resource.pPixelTImageView, SIMG_PIXELS_TS_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageImage(nullptr, resource.pDL_DPixelImageView, SIMG_DL_DPIXELS_BINDING),
+	    myvk::DescriptorSetWrite::WriteInputAttachment(nullptr, resource.pDL_DPixelImageView, IATT_DL_DPIXELS_BINDING),
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.pdL_dPixelBuffer, SBUF_PIXELS_BINDING),
 
 	    // DL_DSplats
@@ -759,7 +764,7 @@ void Rasterizer::CmdBackward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffe
 	pCommandBuffer->CmdPipelineBarrier2(
 	    {}, {},
 	    {
-	        resource.pImage0->GetMemoryBarrier2(
+	        resource.pPixelTImage->GetMemoryBarrier2(
 	            {
 	                // CmdBlit or ForwardCopy
 	                mConfig.forwardOutputImage ? VK_PIPELINE_STAGE_2_BLIT_BIT : VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -772,7 +777,7 @@ void Rasterizer::CmdBackward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffe
 	                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
 	                VK_IMAGE_LAYOUT_GENERAL,
 	            }),
-	        resource.pImage1->GetMemoryBarrier2(
+	        resource.pDL_DPixelImage->GetMemoryBarrier2(
 	            // VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT reads as InputAttachment (BackwardDraw.frag)
 	            {VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, 0},
 	            {
@@ -835,7 +840,7 @@ void Rasterizer::CmdBackward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffe
 	    {
 	        // Barrier for image1 is in SubpassDependency0
 
-	        resource.pImage0->GetMemoryBarrier2(
+	        resource.pPixelTImage->GetMemoryBarrier2(
 	            // VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT write as StorageImage (BackwardCopy)
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL},
 	            {VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
