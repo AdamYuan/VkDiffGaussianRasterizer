@@ -66,12 +66,10 @@ void main() {
 	if (subgroupQuadAll(pixelDiscard))
 		return;
 
-	vec4 dL_dPixel_T = subpassLoad(gDL_DPixels_Ts);
-	vec3 dL_dPixel = dL_dPixel_T.xyz;
-	float T = dL_dPixel_T.w;
+	vec3 dL_dPixel = subpassLoad(gDL_DPixels_Ts).xyz;
 
 	vec3 dL_dColor = dL_dPixel * (alpha * T_i);
-	float dL_dAlpha = dot(dL_dPixel, (gIn.color - (pixel_i1 / T_i1)) * T_i - gBgColor * T / oneMinusAlpha);
+	float dL_dAlpha = T_i * dot(dL_dPixel, gIn.color - pixel_i1 / T_i1);
 
 	SplatViewGeom splatViewGeom;
 	splatViewGeom.conic = gIn.conic;

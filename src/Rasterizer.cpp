@@ -624,8 +624,9 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	    {});
 
 	// ForwardDraw
-	pCommandBuffer->CmdBeginRenderPass(mpForwardRenderPass, resource.pForwardFramebuffer,
-	                                   {VkClearValue{.color = {0.0f, 0.0f, 0.0f, 1.0f}}});
+	pCommandBuffer->CmdBeginRenderPass(
+	    mpForwardRenderPass, resource.pForwardFramebuffer,
+	    {VkClearValue{.color = {roArgs.bgColor[0], roArgs.bgColor[1], roArgs.bgColor[2], 1.0f}}});
 	pCommandBuffer->CmdBindPipeline(mpForwardDrawPipeline);
 	pCommandBuffer->CmdSetViewport({VkViewport{
 	    .x = 0,
