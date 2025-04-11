@@ -37,8 +37,6 @@ void main() {
 	if (pixelDiscard)
 		alpha = 0;
 
-	vec4 dL_dPixel_T = subpassLoad(gDL_DPixels_Ts);
-
 	alpha = min(alpha, ALPHA_MAX);
 	float oneMinusAlpha = 1.0 - alpha;
 	vec3 alphaColor = alpha * gIn.color;
@@ -68,6 +66,7 @@ void main() {
 	if (subgroupQuadAll(pixelDiscard))
 		return;
 
+	vec4 dL_dPixel_T = subpassLoad(gDL_DPixels_Ts);
 	vec3 dL_dPixel = dL_dPixel_T.xyz;
 	float T = dL_dPixel_T.w;
 
