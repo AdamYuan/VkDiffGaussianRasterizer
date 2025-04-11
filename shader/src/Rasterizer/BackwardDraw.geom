@@ -31,7 +31,7 @@ gOut;
 layout(std430, binding = SBUF_SORT_PAYLOADS_BINDING) readonly buffer bSortPayloads { uint gSortPayloads[]; };
 
 void main() {
-	uint orderIdx = gSplatSortCount - 1u - gIn[0].instanceID;
+	uint orderIdx = gIn[0].instanceID;
 	uint sortIdx = gSortPayloads[orderIdx];
 	SplatView splatView = loadSplatView(sortIdx);
 	SplatQuad splatQuad = loadSplatQuad(sortIdx);

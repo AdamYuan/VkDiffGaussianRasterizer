@@ -20,7 +20,7 @@ in bIn {
 }
 gIn;
 
-layout(rgba32f, binding = SIMG_IMAGE0_BINDING) coherent uniform image2D gMs_Rs;
+layout(rgba32f, binding = SIMG_IMAGE0_BINDING) coherent uniform image2D gPixels_Ts;
 layout(input_attachment_index = 0, binding = IATT_IMAGE0_BINDING) uniform subpassInput gDL_DPixels_Ts;
 
 layout(pixel_interlock_ordered, full_quads, early_fragment_tests) in;
@@ -46,14 +46,17 @@ void main() {
 
 	ivec2 coord = ivec2(gl_FragCoord.xy);
 
-	vec4 Mi_Ri, Mi_1_Ri_1;
+	float T_i, T_i1; // T_i, T_{i+1}
+	vec3 pixel_i, pixel_i1;
 
 	beginInvocationInterlockARB();
 	if (!pixelDiscard) {
-		Mi_Ri = imageLoad(gMs_Rs, coord);  // M_i, R_i
-		Mi_1_Ri_1 = Mi_Ri * oneMinusAlpha; // M_{i - 1}, R_{i - 1}
-		Mi_1_Ri_1.xyz += alphaColor;
-		imageStore(gMs_Rs, coord, Mi_1_Ri_1);
+		vec4 pixel_T = imageLoad(gPixels_Ts, coord);
+		pixel_i = pixel_T.xyz;
+		T_i = pixel_T.w;
+		pixel_i1 = pixel_i - T_i * alphaColor;
+		T_i1 = T_i * oneMinusAlpha;
+		imageStore(gPixels_Ts, coord, vec4(pixel_i1, T_i1));
 	}
 	endInvocationInterlockARB();
 
@@ -63,12 +66,8 @@ void main() {
 	vec3 dL_dPixel = dL_dPixel_T.xyz;
 	float T = dL_dPixel_T.w;
 
-	vec3 Mi = Mi_Ri.xyz;      // M_i
-	float Ri_1 = Mi_1_Ri_1.w; // R_{i - 1}
-	float Ti = T / Ri_1;      // T_i
-
-	vec3 dL_dColor = dL_dPixel * (alpha * Ti);
-	float dL_dAlpha = dot(dL_dPixel, (gIn.color - Mi) * Ti - gBgColor * T / oneMinusAlpha);
+	vec3 dL_dColor = dL_dPixel * (alpha * T_i);
+	float dL_dAlpha = dot(dL_dPixel, (gIn.color - (pixel_i1 / T_i1)) * T_i - gBgColor * T / oneMinusAlpha);
 
 	SplatViewGeom splatViewGeom;
 	splatViewGeom.conic = gIn.conic;
