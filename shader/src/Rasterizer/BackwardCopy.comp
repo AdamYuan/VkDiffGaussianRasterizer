@@ -5,7 +5,7 @@
 
 layout(local_size_x = BACKWARD_COPY_DIM_X, local_size_y = BACKWARD_COPY_DIM_Y, local_size_z = 1) in;
 
-layout(rgba32f, binding = SIMG_IMAGE0_BINDING) uniform image2D gPixels_Ts;
+layout(PIXEL_T_FORMAT_IDENTIFIER, binding = SIMG_IMAGE0_BINDING) uniform image2D gPixels_Ts;
 layout(rgba32f, binding = SIMG_IMAGE1_BINDING) uniform image2D gDLDPixels_Ts;
 
 void main() {

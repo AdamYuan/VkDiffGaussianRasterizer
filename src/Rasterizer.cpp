@@ -11,6 +11,18 @@
 
 namespace vkgsraster {
 
+namespace {
+#if PIXEL_T_FORMAT == FORMAT_FLOAT32
+constexpr VkFormat kPixelTImageFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
+#elif PIXEL_T_FORMAT == FORMAT_FLOAT16
+constexpr VkFormat kPixelTImageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+#elif PIXEL_T_FORMAT == FORMAT_UNORM16
+constexpr VkFormat kPixelTImageFormat = VK_FORMAT_R16G16B16A16_UNORM;
+#elif PIXEL_T_FORMAT == FORMAT_UNORM8
+constexpr VkFormat kPixelTImageFormat = VK_FORMAT_R8G8B8A8_UNORM;
+#endif
+} // namespace
+
 void Rasterizer::Resource::UpdateBuffer(const myvk::Ptr<myvk::Device> &pDevice, uint32_t splatCount,
                                         double growFactor) {
 	sorterResource.Update(pDevice, splatCount, growFactor);
@@ -63,7 +75,7 @@ void Rasterizer::Resource::UpdateImage(const myvk::Ptr<myvk::Device> &pDevice, u
 		usage0 |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 	else
 		usage0 |= VK_IMAGE_USAGE_SAMPLED_BIT;
-	if (ResizeImage<VK_FORMAT_R32G32B32A32_SFLOAT>(pDevice, pImage0, usage0, width, height))
+	if (ResizeImage<kPixelTImageFormat>(pDevice, pImage0, usage0, width, height))
 		pImageView0 = myvk::ImageView::Create(pImage0, VK_IMAGE_VIEW_TYPE_2D);
 
 	if (ResizeImage<VK_FORMAT_R32G32B32A32_SFLOAT>(

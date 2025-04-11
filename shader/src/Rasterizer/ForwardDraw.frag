@@ -22,7 +22,7 @@ in bIn {
 }
 gIn;
 
-layout(rgba32f, binding = SIMG_IMAGE0_BINDING) coherent uniform image2D gColors_Ts;
+layout(PIXEL_T_FORMAT_IDENTIFIER, binding = SIMG_IMAGE0_BINDING) coherent uniform image2D gPixels_Ts;
 
 layout(pixel_interlock_ordered, full_quads) in;
 
@@ -47,12 +47,12 @@ void main() {
 
 	beginInvocationInterlockARB();
 	if (!pixelDiscard) {
-		vec4 color_T = imageLoad(gColors_Ts, coord);
-		depthDiscard = color_T.w >= T_MIN;
+		vec4 pixel_T = imageLoad(gPixels_Ts, coord);
+		depthDiscard = pixel_T.w >= T_MIN;
 		if (depthDiscard) {
-			color_T.xyz += alphaColor * color_T.w;
-			color_T.w *= oneMinusAlpha;
-			imageStore(gColors_Ts, coord, color_T);
+			pixel_T.xyz += alphaColor * pixel_T.w;
+			pixel_T.w *= oneMinusAlpha;
+			imageStore(gPixels_Ts, coord, pixel_T);
 		}
 	}
 	endInvocationInterlockARB();
