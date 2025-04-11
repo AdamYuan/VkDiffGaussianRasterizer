@@ -69,7 +69,7 @@ void Rasterizer::Resource::UpdateImage(const myvk::Ptr<myvk::Device> &pDevice, u
 	if (ResizeImage<kPixelTImageFormat>(
 	        pDevice, pPixelTImage,
 	        [&] {
-		        VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+		        VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
 		        if (rasterizer.GetConfig().forwardOutputImage)
 			        usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 		        else
@@ -320,26 +320,22 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 		         .sync = myvk::GetAttachmentLoadOpSync(VK_IMAGE_ASPECT_COLOR_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR)})
 		    .SetDstExternalDependency(
 		        1,
-		        {.subpass = 1,
+		        {.subpass = 0,
 		         .sync = myvk::GetAttachmentStoreOpSync(VK_IMAGE_ASPECT_COLOR_BIT, VK_ATTACHMENT_STORE_OP_STORE)},
 		        mConfig.forwardOutputImage
 		            ? myvk::MemorySyncState{VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT}
 		            : myvk::MemorySyncState{VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-		                                    VK_ACCESS_2_SHADER_STORAGE_READ_BIT});
+		                                    VK_ACCESS_2_SHADER_SAMPLED_READ_BIT});
 		return state;
 	}());
 
 	// Backward RenderPass
 	mpBackwardRenderPass = myvk::RenderPass::Create(pDevice, [&] {
 		myvk::RenderPassState2 state;
-		state.SetAttachmentCount(2)
+		state.SetAttachmentCount(1)
 		    .SetAttachment(0, VK_FORMAT_R32G32B32A32_SFLOAT,
 		                   {.op = VK_ATTACHMENT_LOAD_OP_NONE_EXT, .layout = VK_IMAGE_LAYOUT_GENERAL},
 		                   {.op = VK_ATTACHMENT_STORE_OP_NONE, .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
-		    .SetAttachment(
-		        1, VK_FORMAT_D32_SFLOAT,
-		        {.op = VK_ATTACHMENT_LOAD_OP_LOAD, .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL},
-		        {.op = VK_ATTACHMENT_STORE_OP_DONT_CARE, .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL})
 		    .SetSubpassCount(1)
 		    .SetSubpass(0,
 		                {
@@ -351,16 +347,11 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 		                                .aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT,
 		                            },
 		                        },
-		                    .opt_depth_stencil_attachment_ref =
-		                        myvk::RenderPassState2::SubpassInfo::AttachmentRef{
-		                            .attachment = 1,
-		                            .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-		                        },
 		                })
-		    .SetDependencyCount(2)
+		    .SetDependencyCount(1)
 		    .SetSrcExternalDependency(0,
 		                              {
-		                                  // pImage1 BackwardCopy
+		                                  // DL_DPixelImage BackwardCopy
 		                                  VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 		                                  VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
 		                              },
@@ -372,11 +363,7 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 		                                          VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
 		                                          VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT,
 		                                      },
-		                              })
-		    .SetSrcExternalDependency(
-		        1, myvk::GetAttachmentStoreOpSync(VK_IMAGE_ASPECT_DEPTH_BIT, VK_ATTACHMENT_STORE_OP_STORE),
-		        {.subpass = 0,
-		         .sync = myvk::GetAttachmentLoadOpSync(VK_IMAGE_ASPECT_DEPTH_BIT, VK_ATTACHMENT_LOAD_OP_LOAD)});
+		                              });
 		;
 		return state;
 	}());
