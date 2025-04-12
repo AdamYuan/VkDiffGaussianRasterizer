@@ -21,7 +21,7 @@ in bIn {
 gIn;
 
 layout(PIXEL_T_FORMAT_IDENTIFIER, binding = SIMG_PIXELS_TS_BINDING) coherent uniform image2D gPixels_Ts;
-layout(input_attachment_index = 0, binding = IATT_DL_DPIXELS_BINDING) uniform subpassInput gDL_DPixels_Ts;
+layout(input_attachment_index = 0, binding = IATT_DL_DPIXELS_BINDING) uniform subpassInput gDL_DPixels;
 
 layout(pixel_interlock_ordered, full_quads) in;
 
@@ -66,7 +66,7 @@ void main() {
 	if (subgroupQuadAll(pixelDiscard))
 		return;
 
-	vec3 dL_dPixel = subpassLoad(gDL_DPixels_Ts).xyz;
+	vec3 dL_dPixel = subpassLoad(gDL_DPixels).xyz;
 
 	vec3 dL_dColor = dL_dPixel * (alpha * T_i);
 	float dL_dAlpha = T_i * dot(dL_dPixel, gIn.color - pixel_i1 / T_i1);

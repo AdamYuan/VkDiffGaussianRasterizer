@@ -16,6 +16,18 @@
 #define PIXEL_T_FORMAT_IDENTIFIER rgba16
 #elif PIXEL_T_FORMAT == FORMAT_UNORM8
 #define PIXEL_T_FORMAT_IDENTIFIER rgba8
+#else
+#error Invalid Format for PIXEL_T Image
+#endif
+
+#define DL_DPIXEL_FORMAT FORMAT_FLOAT32
+
+#if DL_DPIXEL_FORMAT == FORMAT_FLOAT32
+#define DL_DPIXEL_FORMAT_IDENTIFIER rgba32f
+#elif DL_DPIXEL_FORMAT == FORMAT_FLOAT16
+#define DL_DPIXEL_FORMAT_IDENTIFIER rgba16f
+#else
+#error Invalid Format for DL_DPIXEL Image
 #endif
 
 #define SH_DEGREE 3

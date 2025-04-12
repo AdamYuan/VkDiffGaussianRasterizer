@@ -21,6 +21,12 @@ constexpr VkFormat kPixelTImageFormat = VK_FORMAT_R16G16B16A16_UNORM;
 #elif PIXEL_T_FORMAT == FORMAT_UNORM8
 constexpr VkFormat kPixelTImageFormat = VK_FORMAT_R8G8B8A8_UNORM;
 #endif
+
+#if DL_DPIXEL_FORMAT == FORMAT_FLOAT32
+constexpr VkFormat kDL_DPixelImageFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
+#elif DL_DPIXEL_FORMAT == FORMAT_FLOAT16
+constexpr VkFormat kDL_DPixelImageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+#endif
 } // namespace
 
 void Rasterizer::Resource::UpdateBuffer(const myvk::Ptr<myvk::Device> &pDevice, uint32_t splatCount,
@@ -79,7 +85,7 @@ void Rasterizer::Resource::UpdateImage(const myvk::Ptr<myvk::Device> &pDevice, u
 	        width, height))
 		pPixelTImageView = myvk::ImageView::Create(pPixelTImage, VK_IMAGE_VIEW_TYPE_2D);
 
-	if (ResizeImage<VK_FORMAT_R32G32B32A32_SFLOAT>(
+	if (ResizeImage<kDL_DPixelImageFormat>(
 	        pDevice, pDL_DPixelImage, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT, width, height))
 		pDL_DPixelImageView = myvk::ImageView::Create(pDL_DPixelImage, VK_IMAGE_VIEW_TYPE_2D);
 
@@ -333,7 +339,7 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	mpBackwardRenderPass = myvk::RenderPass::Create(pDevice, [&] {
 		myvk::RenderPassState2 state;
 		state.SetAttachmentCount(1)
-		    .SetAttachment(0, VK_FORMAT_R32G32B32A32_SFLOAT,
+		    .SetAttachment(0, kDL_DPixelImageFormat,
 		                   {.op = VK_ATTACHMENT_LOAD_OP_NONE_EXT, .layout = VK_IMAGE_LAYOUT_GENERAL},
 		                   {.op = VK_ATTACHMENT_STORE_OP_NONE, .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
 		    .SetSubpassCount(1)
