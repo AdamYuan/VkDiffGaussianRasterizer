@@ -31,8 +31,6 @@ void main() {
 	float G;
 	float alpha = quadPos2alpha(gIn.quadPos, gIn.opacity, G);
 	bool pixelDiscard = alpha < ALPHA_MIN || gl_HelperInvocation;
-	if (subgroupQuadAll(pixelDiscard))
-		discard;
 
 	if (pixelDiscard)
 		alpha = 0;
