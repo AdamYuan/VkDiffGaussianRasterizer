@@ -37,7 +37,7 @@ void main() {
 	if (!inFrustum(splatView.geom, splatQuad, camera))
 		return;
 
-	uint sortIdx = atomicAdd(gDrawArgs[1], 1u); // gDrawArgs[1] is InstanceCount
+	uint sortIdx = atomicAdd(gDrawArgs[0], 1u); // gDrawArgs[0] is VertexCount 
 	storeSplatView(sortIdx, splatView);
 	storeSplatQuad(sortIdx, splatQuad);
 

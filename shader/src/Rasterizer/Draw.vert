@@ -3,4 +3,4 @@
 out bOut { layout(location = 0) uint instanceID; }
 gOut;
 
-void main() { gOut.instanceID = gl_InstanceIndex; }
+void main() { gOut.instanceID = gl_VertexIndex; }
