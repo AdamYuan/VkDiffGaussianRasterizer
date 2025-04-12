@@ -1,7 +1,4 @@
 #version 460
-#extension GL_KHR_shader_subgroup_vote : require
-#extension GL_KHR_shader_subgroup_quad : require
-#extension GL_EXT_shader_quad_control : require
 
 // #define DEBUG_SUBGROUP
 
