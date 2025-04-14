@@ -921,5 +921,5 @@ const Rasterizer::BwdArgsUsage &Rasterizer::GetBwdArgsUsage() {
 // Check DeviceSorter KeyCountBufferOffset
 #undef SBUF_DISPATCH_ARGS_BINDING // Remove warning
 #include <shader/DeviceSorter/Size.hpp>
-static_assert(KEY_COUNT_BUFFER_OFFSET == offsetof(VkDrawIndirectCommand, vertexCount));
+static_assert(KEY_COUNT_BUFFER_OFFSET == offsetof(VkDrawIndirectCommand, instanceCount));
 static_assert(KEY_COUNT_BUFFER_OFFSET == SORT_COUNT_BUFFER_OFFSET);
