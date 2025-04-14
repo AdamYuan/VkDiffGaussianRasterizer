@@ -182,31 +182,31 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	        {.binding = SBUF_SORT_PAYLOADS_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 	         .descriptorCount = 1u,
-	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT},
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT},
 	        {.binding = SBUF_SORT_SPLAT_INDICES_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 	         .descriptorCount = 1u,
-	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT},
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT},
 
 	        // SplatViews
 	        {.binding = SBUF_COLORS_MEAN2DXS_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 	         .descriptorCount = 1u,
-	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT},
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT},
 	        {.binding = SBUF_CONICS_MEAN2DYS_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 	         .descriptorCount = 1u,
-	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT},
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT},
 	        {.binding = SBUF_VIEW_OPACITIES_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 	         .descriptorCount = 1u,
-	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT},
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT},
 
 	        // SplatQuads
 	        {.binding = SBUF_QUADS_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 	         .descriptorCount = 1u,
-	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT},
+	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT},
 
 	        // Draw Args
 	        {.binding = SBUF_DRAW_ARGS_BINDING,
@@ -216,7 +216,7 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	        {.binding = UBUF_SORT_COUNT_BINDING,
 	         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 	         .descriptorCount = 1u,
-	         .stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_COMPUTE_BIT},
+	         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT},
 
 	        // Images
 	        {.binding = SIMG_PIXELS_TS_BINDING,
@@ -287,7 +287,7 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	mpPipelineLayout = myvk::PipelineLayout::Create(
 	    pDevice, {pDescriptorSetLayout},
 	    {VkPushConstantRange{
-	        .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+	        .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 	        .offset = 0u,
 	        .size = sizeof(PushConstantData),
 	    }});
@@ -374,17 +374,13 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 		return state;
 	}());
 
-	// Common Shader Module
-	auto pDrawVertShader = createDrawVertShader(pDevice);
-
 	// Forward Pipelines
 	mpForwardResetPipeline = myvk::ComputePipeline::Create(mpPipelineLayout, createForwardResetShader(pDevice));
 	mpForwardViewPipeline = myvk::ComputePipeline::Create(mpPipelineLayout, createForwardViewShader(pDevice));
 	mpForwardCopyPipeline = myvk::ComputePipeline::Create(mpPipelineLayout, createForwardCopyShader(pDevice));
 	mpForwardDrawPipeline = myvk::GraphicsPipeline::Create(
 	    mpPipelineLayout, mpForwardRenderPass,
-	    myvk::GraphicsPipelineShaderModules{.vert = pDrawVertShader,
-	                                        .geom = createForwardDrawGeomShader(pDevice),
+	    myvk::GraphicsPipelineShaderModules{.vert = createForwardDrawVertShader(pDevice),
 	                                        .frag = createForwardDrawFragShader(pDevice)},
 	    [] {
 		    myvk::GraphicsPipelineState state{};
@@ -404,7 +400,7 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 		    });
 		    state.m_viewport_state.Enable();
 		    state.m_vertex_input_state.Enable();
-		    state.m_input_assembly_state.Enable(VK_PRIMITIVE_TOPOLOGY_POINT_LIST);
+		    state.m_input_assembly_state.Enable(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP);
 		    state.m_rasterization_state.Initialize(VK_POLYGON_MODE_FILL, VK_FRONT_FACE_CLOCKWISE, VK_CULL_MODE_NONE);
 		    state.m_multisample_state.Enable(VK_SAMPLE_COUNT_1_BIT);
 		    return state;
@@ -417,8 +413,7 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	mpBackwardCopyPipeline = myvk::ComputePipeline::Create(mpPipelineLayout, createBackwardCopyShader(pDevice));
 	mpBackwardDrawPipeline = myvk::GraphicsPipeline::Create(
 	    mpPipelineLayout, mpBackwardRenderPass,
-	    myvk::GraphicsPipelineShaderModules{.vert = pDrawVertShader,
-	                                        .geom = createBackwardDrawGeomShader(pDevice),
+	    myvk::GraphicsPipelineShaderModules{.vert = createBackwardDrawVertShader(pDevice),
 	                                        .frag = createBackwardDrawFragShader(pDevice)},
 	    [] {
 		    myvk::GraphicsPipelineState state{};
@@ -426,7 +421,7 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 		    state.m_color_blend_state.Enable(0, VK_FALSE);
 		    state.m_viewport_state.Enable();
 		    state.m_vertex_input_state.Enable();
-		    state.m_input_assembly_state.Enable(VK_PRIMITIVE_TOPOLOGY_POINT_LIST);
+		    state.m_input_assembly_state.Enable(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP);
 		    state.m_rasterization_state.Initialize(VK_POLYGON_MODE_FILL, VK_FRONT_FACE_CLOCKWISE, VK_CULL_MODE_NONE);
 		    state.m_multisample_state.Enable(VK_SAMPLE_COUNT_1_BIT);
 		    return state;
@@ -486,7 +481,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	// Descriptors and Push Constants
 	pCommandBuffer->CmdPushDescriptorSet(mpPipelineLayout, VK_PIPELINE_BIND_POINT_COMPUTE, 0, descriptorSetWrites);
 	pCommandBuffer->CmdPushConstants(
-	    mpPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, //
+	    mpPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, //
 	    0, sizeof(PushConstantData), &pcData);
 
 	// ForwardReset
@@ -496,10 +491,10 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	        resource.pDrawArgBuffer->GetMemoryBarrier2(
 	            // VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT reads as DrawArg (ForwardDraw | BackwardDraw)
 	            // VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT reads as UniformBuffer (BackwardReset | BackwardView)
-	            // VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT reads as UniformBuffer (ForwardDraw.geom | BackwardDraw.geom)
+	            // VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT reads as UniformBuffer (ForwardDraw.vert | BackwardDraw.vert)
 	            // DeviceSorter reads
 	            {VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
-	                 VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT | DeviceSorter::GetROArgsSync().countBuffer.stage_mask,
+	                 VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | DeviceSorter::GetROArgsSync().countBuffer.stage_mask,
 	             0},
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
 	    },
@@ -520,27 +515,27 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	            DeviceSorter::GetDstRWArgsSync().keyBuffer.GetWrite(),
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
 	        resource.pSortPayloadBuffer->GetMemoryBarrier2(
-	            // VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT reads as StorageBuffer (ForwardDraw.geom | BackwardDraw.geom)
-	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, 0},
+	            // VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT reads as StorageBuffer (ForwardDraw.vert | BackwardDraw.vert)
+	            {VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT, 0},
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
 	        resource.pSortSplatIndexBuffer->GetMemoryBarrier2(
 	            // VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT reads as StorageBuffer (BackwardView)
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, 0},
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
 	        // SplatView and SplatQuad Buffers
-	        // VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT reads (ForwardDraw.geom | BackwardDraw.geom)
+	        // VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT reads (ForwardDraw.vert | BackwardDraw.vert)
 	        resource.pColorMean2DXBuffer->GetMemoryBarrier2(
-	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, 0},
+	            {VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT, 0},
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
 	        resource.pConicMean2DYBuffer->GetMemoryBarrier2(
-	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, 0},
+	            {VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT, 0},
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
 	        resource.pViewOpacityBuffer->GetMemoryBarrier2(
-	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, 0},
+	            {VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT, 0},
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
 
 	        resource.pQuadBuffer->GetMemoryBarrier2(
-	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, 0},
+	            {VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT, 0},
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT}),
 	    },
 	    {});
@@ -563,11 +558,11 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	            DeviceSorter::GetROArgsSync().countBuffer |
 	                // VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT reads as DrawArg (ForwardDraw | BackwardDraw)
 	                // VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT reads as UniformBuffer (BackwardReset | BackwardView)
-	                // VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT reads as UniformBuffer (ForwardDraw.geom |
-	                // BackwardDraw.geom)
+	                // VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT reads as UniformBuffer (ForwardDraw.vert |
+	                // BackwardDraw.vert)
 	                myvk::BufferSyncState{
 	                    VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
-	                        VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT,
+	                        VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT,
 	                    VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_UNIFORM_READ_BIT,
 	                }),
 	    },
@@ -584,7 +579,7 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	if (!mConfig.forwardOutputImage)
 		pCommandBuffer->CmdPushDescriptorSet(mpPipelineLayout, VK_PIPELINE_BIND_POINT_COMPUTE, 0, descriptorSetWrites);
 	pCommandBuffer->CmdPushConstants(
-	    mpPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, //
+	    mpPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, //
 	    0, sizeof(PushConstantData), &pcData);
 
 	// Read-After-Write Barriers for pSortPayloadBuffer, pSortSplatIndexBuffer, SplatView Buffers, SplatQuad Buffers
@@ -593,26 +588,26 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 	    {
 	        resource.pSortPayloadBuffer->GetMemoryBarrier2(
 	            DeviceSorter::GetDstRWArgsSync().payloadBuffer.GetWrite(),
-	            // VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT reads as StorageBuffer (ForwardDraw.geom | BackwardDraw.geom)
-	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
+	            // VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT reads as StorageBuffer (ForwardDraw.vert | BackwardDraw.vert)
+	            {VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
 	        resource.pSortSplatIndexBuffer->GetMemoryBarrier2(
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
 	            // VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT reads as StorageBuffer (BackwardView)
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
 	        // SplatView and SplatQuad Buffers
-	        // VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT reads (ForwardDraw.geom | BackwardDraw.geom)
+	        // VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT reads (ForwardDraw.vert | BackwardDraw.vert)
 	        resource.pColorMean2DXBuffer->GetMemoryBarrier2(
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
-	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
+	            {VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
 	        resource.pConicMean2DYBuffer->GetMemoryBarrier2(
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
-	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
+	            {VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
 	        resource.pViewOpacityBuffer->GetMemoryBarrier2(
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
-	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
+	            {VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
 	        resource.pQuadBuffer->GetMemoryBarrier2(
 	            {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
-	            {VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
+	            {VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT}),
 	    },
 	    {});
 
@@ -719,7 +714,7 @@ void Rasterizer::CmdBackward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffe
 	pCommandBuffer->CmdPushDescriptorSet(mpPipelineLayout, VK_PIPELINE_BIND_POINT_COMPUTE, 0, descriptorSetWrites);
 	pCommandBuffer->CmdPushDescriptorSet(mpPipelineLayout, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, descriptorSetWrites);
 	pCommandBuffer->CmdPushConstants(
-	    mpPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, //
+	    mpPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, //
 	    0, sizeof(PushConstantData), &pcData);
 
 	// BackwardCopy
@@ -874,7 +869,7 @@ const Rasterizer::FwdROArgsSyncState &Rasterizer::GetFwdROArgsSync() {
 	static constexpr FwdROArgsSyncState kSync = {
 	    .splatBuffers = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT},
 	    // Opacity buffer is additionally read in Geometry Shader (as SplatView.opacity)
-	    .splatOpacityBuffer = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT,
+	    .splatOpacityBuffer = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT,
 	                           VK_ACCESS_2_SHADER_STORAGE_READ_BIT},
 	};
 	return kSync;

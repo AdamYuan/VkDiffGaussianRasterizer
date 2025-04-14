@@ -81,7 +81,6 @@ export_shader(DeviceSorterTest DeviceSorterTest/Size.glsl DeviceSorterTest/Size.
 # Rasterizer
 add_shader_library(Rasterizer)
 export_shader(Rasterizer Rasterizer/Size.glsl Rasterizer/Size.hpp)
-add_shader(Rasterizer Rasterizer/Draw.vert Rasterizer/Draw.vert.inl "-O")
 function(add_Rasterizer_shader INPUT_FILE OUTPUT_FILE OPTIONS)
     add_shader(Rasterizer Rasterizer/${INPUT_FILE} Rasterizer/${OUTPUT_FILE} "${OPTIONS}")
     add_shader_include(Rasterizer/${OUTPUT_FILE} Rasterizer/Common.glsl)
@@ -90,13 +89,13 @@ function(add_Rasterizer_shader INPUT_FILE OUTPUT_FILE OPTIONS)
 endfunction()
 add_Rasterizer_shader(ForwardReset.comp ForwardReset.comp.inl "-O")
 add_Rasterizer_shader(ForwardView.comp ForwardView.comp.inl "-O")
-add_Rasterizer_shader(ForwardDraw.geom ForwardDraw.geom.inl "-O")
+add_Rasterizer_shader(ForwardDraw.vert ForwardDraw.vert.inl "-O")
 add_Rasterizer_shader(ForwardDraw.frag ForwardDraw.frag.inl "-O")
 add_Rasterizer_shader(ForwardCopy.comp ForwardCopy.comp.inl "-O")
 
 add_Rasterizer_shader(BackwardReset.comp BackwardReset.comp.inl "-O")
 add_Rasterizer_shader(BackwardCopy.comp BackwardCopy.comp.inl "-O")
-add_Rasterizer_shader(BackwardDraw.geom BackwardDraw.geom.inl "-O")
+add_Rasterizer_shader(BackwardDraw.vert BackwardDraw.vert.inl "-O")
 add_Rasterizer_shader(BackwardDraw.frag BackwardDraw.frag.inl "-O")
 add_Rasterizer_shader(BackwardView.comp BackwardView.comp.inl "-O")
 

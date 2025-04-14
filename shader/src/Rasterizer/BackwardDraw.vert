@@ -4,8 +4,6 @@
 #define RASTERIZER_LOAD_SPLAT_QUAD
 #include "Common.glsl"
 
-// #define DEBUG_SUBGROUP
-
 #define VERT_NUM 4
 const vec2[VERT_NUM] kVerts = {
     vec2(1.000000, 1.000000),
@@ -14,26 +12,20 @@ const vec2[VERT_NUM] kVerts = {
     vec2(-1.000000, -1.000000),
 };
 
-layout(points) in;
-layout(triangle_strip, max_vertices = VERT_NUM) out;
-
-in bIn { layout(location = 0) uint instanceID; }
-gIn[];
-
 out bOut {
-	layout(location = 0) flat float opacity;
-	layout(location = 1) flat vec3 color;
-	layout(location = 2) noperspective vec2 quadPos;
-#ifdef DEBUG_SUBGROUP
-	layout(location = 3) flat uint sortIdx;
-#endif
+	layout(location = 0) flat vec3 color;
+	layout(location = 1) flat vec3 conic;
+	layout(location = 2) flat vec2 mean2D;
+	layout(location = 3) flat float opacity;
+	layout(location = 4) flat uint sortIdx;
+	layout(location = 5) noperspective vec2 quadPos;
 }
 gOut;
 
 layout(std430, binding = SBUF_SORT_PAYLOADS_BINDING) readonly buffer bSortPayloads { uint gSortPayloads[]; };
 
 void main() {
-	uint orderIdx = gSplatSortCount - 1 - gIn[0].instanceID;
+	uint orderIdx = gl_InstanceIndex;
 	uint sortIdx = gSortPayloads[orderIdx];
 	SplatView splatView = loadSplatView(sortIdx);
 	SplatQuad splatQuad = loadSplatQuad(sortIdx);
@@ -45,17 +37,11 @@ void main() {
 	vec2 axisClip1 = axis2D2clip(splatQuad.axis1, camera);
 	vec2 axisClip2 = axis2D2clip(splatQuad.axis2, camera);
 
-	[[unroll]]
-	for (uint i = 0; i < VERT_NUM; ++i) {
-		gOut.opacity = splatView.geom.opacity;
-		gOut.color = splatView.color;
-		gOut.quadPos = kVerts[i] * quadBound;
-#ifdef DEBUG_SUBGROUP
-		gOut.sortIdx = sortIdx;
-#endif
-		gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, 0, 1);
-		EmitVertex();
-	}
-
-	EndPrimitive();
+	gOut.color = splatView.color;
+	gOut.conic = splatView.geom.conic;
+	gOut.mean2D = splatView.geom.mean2D;
+	gOut.opacity = splatView.geom.opacity;
+	gOut.sortIdx = sortIdx;
+	gOut.quadPos = kVerts[gl_VertexIndex] * quadBound;
+	gl_Position = vec4(meanClip + axisClip1 * gOut.quadPos.x + axisClip2 * gOut.quadPos.y, 0, 1);
 }

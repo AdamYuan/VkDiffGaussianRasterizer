@@ -6,13 +6,6 @@
 
 namespace vkgsraster {
 
-myvk::Ptr<myvk::ShaderModule> Rasterizer::createDrawVertShader(const myvk::Ptr<myvk::Device> &pDevice) {
-	static constexpr uint32_t kCode[] = {
-#include <shader/Rasterizer/Draw.vert.inl>
-
-	};
-	return myvk::ShaderModule::Create(pDevice, kCode, sizeof(kCode));
-}
 myvk::Ptr<myvk::ShaderModule> Rasterizer::createForwardResetShader(const myvk::Ptr<myvk::Device> &pDevice) {
 	static constexpr uint32_t kCode[] = {
 #include <shader/Rasterizer/ForwardReset.comp.inl>
@@ -27,9 +20,9 @@ myvk::Ptr<myvk::ShaderModule> Rasterizer::createForwardViewShader(const myvk::Pt
 	};
 	return myvk::ShaderModule::Create(pDevice, kCode, sizeof(kCode));
 }
-myvk::Ptr<myvk::ShaderModule> Rasterizer::createForwardDrawGeomShader(const myvk::Ptr<myvk::Device> &pDevice) {
+myvk::Ptr<myvk::ShaderModule> Rasterizer::createForwardDrawVertShader(const myvk::Ptr<myvk::Device> &pDevice) {
 	static constexpr uint32_t kCode[] = {
-#include <shader/Rasterizer/ForwardDraw.geom.inl>
+#include <shader/Rasterizer/ForwardDraw.vert.inl>
 
 	};
 	return myvk::ShaderModule::Create(pDevice, kCode, sizeof(kCode));
@@ -62,9 +55,9 @@ myvk::Ptr<myvk::ShaderModule> Rasterizer::createBackwardViewShader(const myvk::P
 	};
 	return myvk::ShaderModule::Create(pDevice, kCode, sizeof(kCode));
 }
-myvk::Ptr<myvk::ShaderModule> Rasterizer::createBackwardDrawGeomShader(const myvk::Ptr<myvk::Device> &pDevice) {
+myvk::Ptr<myvk::ShaderModule> Rasterizer::createBackwardDrawVertShader(const myvk::Ptr<myvk::Device> &pDevice) {
 	static constexpr uint32_t kCode[] = {
-#include <shader/Rasterizer/BackwardDraw.geom.inl>
+#include <shader/Rasterizer/BackwardDraw.vert.inl>
 
 	};
 	return myvk::ShaderModule::Create(pDevice, kCode, sizeof(kCode));

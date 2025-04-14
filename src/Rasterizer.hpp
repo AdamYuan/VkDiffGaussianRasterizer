@@ -158,15 +158,14 @@ private:
 	myvk::Ptr<myvk::GraphicsPipeline> mpBackwardDrawPipeline;
 	myvk::Ptr<myvk::RenderPass> mpBackwardRenderPass;
 
-	static myvk::Ptr<myvk::ShaderModule> createDrawVertShader(const myvk::Ptr<myvk::Device> &pDevice);
 	static myvk::Ptr<myvk::ShaderModule> createForwardResetShader(const myvk::Ptr<myvk::Device> &pDevice);
 	static myvk::Ptr<myvk::ShaderModule> createForwardViewShader(const myvk::Ptr<myvk::Device> &pDevice);
-	static myvk::Ptr<myvk::ShaderModule> createForwardDrawGeomShader(const myvk::Ptr<myvk::Device> &pDevice);
+	static myvk::Ptr<myvk::ShaderModule> createForwardDrawVertShader(const myvk::Ptr<myvk::Device> &pDevice);
 	static myvk::Ptr<myvk::ShaderModule> createForwardDrawFragShader(const myvk::Ptr<myvk::Device> &pDevice);
 	static myvk::Ptr<myvk::ShaderModule> createForwardCopyShader(const myvk::Ptr<myvk::Device> &pDevice);
 	static myvk::Ptr<myvk::ShaderModule> createBackwardResetShader(const myvk::Ptr<myvk::Device> &pDevice);
 	static myvk::Ptr<myvk::ShaderModule> createBackwardViewShader(const myvk::Ptr<myvk::Device> &pDevice);
-	static myvk::Ptr<myvk::ShaderModule> createBackwardDrawGeomShader(const myvk::Ptr<myvk::Device> &pDevice);
+	static myvk::Ptr<myvk::ShaderModule> createBackwardDrawVertShader(const myvk::Ptr<myvk::Device> &pDevice);
 	static myvk::Ptr<myvk::ShaderModule> createBackwardDrawFragShader(const myvk::Ptr<myvk::Device> &pDevice);
 	static myvk::Ptr<myvk::ShaderModule> createBackwardCopyShader(const myvk::Ptr<myvk::Device> &pDevice);
 
