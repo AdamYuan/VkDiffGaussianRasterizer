@@ -41,20 +41,20 @@ void main() {
 
 	ivec2 coord = ivec2(gl_FragCoord.xy);
 
-	float T_i, T_i1; // T_i, T_{i+1}
-	vec3 pixel_i1;
+	float T_i;
+	vec3 pixel_i;
 
 	bool TDiscard = false;
 
 	beginInvocationInterlockARB();
 	if (!pixelDiscard) {
 		vec4 pixel_T = imageLoad(gPixels_Ts, coord);
-		vec3 pixel_i = pixel_T.xyz;
+		pixel_i = pixel_T.xyz;
 		T_i = pixel_T.w;
 		TDiscard = T_i < T_MIN;
 		if (!TDiscard) {
-			T_i1 = T_i * oneMinusAlpha;
-			pixel_i1 = pixel_i - T_i * alphaColor;
+			float T_i1 = T_i * oneMinusAlpha;
+			vec3 pixel_i1 = pixel_i - T_i * alphaColor;
 			imageStore(gPixels_Ts, coord, vec4(pixel_i1, T_i1));
 		}
 	}
@@ -67,7 +67,7 @@ void main() {
 	vec3 dL_dPixel = subpassLoad(gDL_DPixels).xyz;
 
 	vec3 dL_dColor = dL_dPixel * (alpha * T_i);
-	float dL_dAlpha = T_i * dot(dL_dPixel, gIn.color - pixel_i1 / T_i1);
+	float dL_dAlpha = dot(dL_dPixel, gIn.color * T_i - pixel_i) / oneMinusAlpha;
 
 	SplatViewGeom splatViewGeom;
 	splatViewGeom.conic = gIn.conic;
