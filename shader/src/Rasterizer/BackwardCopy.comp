@@ -5,8 +5,8 @@
 
 layout(local_size_x = BACKWARD_COPY_DIM_X, local_size_y = BACKWARD_COPY_DIM_Y, local_size_z = 1) in;
 
-layout(PIXEL_T_FORMAT_IDENTIFIER, binding = SIMG_PIXELS_TS_BINDING) readonly uniform image2D gPixels_Ts;
-layout(DL_DPIXEL_FORMAT_IDENTIFIER, binding = SIMG_DL_DPIXELS_BINDING) writeonly uniform image2D gDL_DPixels;
+layout(PIXEL_T_FORMAT_IDENTIFIER, binding = SIMG_PIXELS_TS_BINDING) uniform image2D gPixels_Ts;
+layout(DL_DPIXEL_FORMAT_IDENTIFIER, binding = SIMG_DL_DPIXELS_BINDING) uniform image2D gDL_DPixels;
 
 void main() {
 	uvec2 pixelCoord = gl_GlobalInvocationID.xy;
@@ -16,5 +16,5 @@ void main() {
 	vec3 dL_dPixel = loadPixel(pixelCoord);
 	vec4 pixel_T = imageLoad(gPixels_Ts, ivec2(pixelCoord));
 	imageStore(gDL_DPixels, ivec2(pixelCoord), vec4(dL_dPixel, 0.0));
-	// imageStore(gPixels_Ts, ivec2(pixelCoord), vec4(pixel_T.xyz, 1.0));
+	imageStore(gPixels_Ts, ivec2(pixelCoord), vec4(pixel_T.xyz, 1.0));
 }
