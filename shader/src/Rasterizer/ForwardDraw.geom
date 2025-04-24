@@ -36,6 +36,9 @@ void main() {
 	uint orderIdx = gSplatSortCount - 1 - gIn[0].instanceID;
 	uint sortIdx = gSortPayloads[orderIdx];
 	SplatView splatView = loadSplatView(sortIdx);
+#if PIXEL_T_FORMAT == FORMAT_UNORM8 || PIXEL_T_FORMAT == FORMAT_UNORM16
+	splatView.color = min(splatView.color, 1.0);
+#endif
 	SplatQuad splatQuad = loadSplatQuad(sortIdx);
 
 	float quadBound = opacity2quadBound(splatView.geom.opacity);
