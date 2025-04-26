@@ -85,17 +85,17 @@ target_link_libraries(RasterizerTest PRIVATE
 )
 
 enable_language(CUDA)
-add_executable(PerformanceTest
+add_executable(VerboseTest
         test/GSModel.cpp
         test/GSDataset.cpp
         test/VkCuBuffer.cu
         test/VkCuBuffer.hpp
         test/CuTileRasterizer.cu
         test/CuTileRasterizer.hpp
-        test/PerformanceTest.cpp
-        test/PerformanceTest.cu
+        test/VerboseTest.cpp
+        test/VerboseTest.cu
 )
-target_link_libraries(PerformanceTest PRIVATE
+target_link_libraries(VerboseTest PRIVATE
         myvk::vulkan
         vkgsraster::Rasterizer
         CudaRasterizer
