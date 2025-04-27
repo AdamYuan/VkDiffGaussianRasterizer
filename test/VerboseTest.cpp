@@ -128,14 +128,14 @@ int main(int argc, char **argv) {
 	CuTileRasterizer::BwdROArgs cuTileRasterBwdROArgs{};
 	CuTileRasterizer::BwdRWArgs cuTileRasterBwdRWArgs{};
 
-	printf("COUNT: %zu\n", gsDataset.entries.size());
-
 	double sumCohesionRate = 0, sumAtomicAddRate = 0;
 
 	if (single)
 		gsDataset.entries = {gsDataset.entries[0]};
 
-	for (auto &entry : gsDataset.entries) {
+	for (uint32_t entryIdx = 0; auto &entry : gsDataset.entries) {
+		printf("%d/%zu\n", entryIdx, gsDataset.entries.size());
+
 		float widthRatio = float(width) / float(entry.camera.width);
 		entry.camera.focalX *= widthRatio;
 		entry.camera.focalY *= widthRatio;
@@ -203,6 +203,7 @@ int main(int argc, char **argv) {
 
 		sumCohesionRate += cohesionRate;
 		sumAtomicAddRate += atomicAddRate;
+		++entryIdx;
 	}
 
 	printf("avg subgroup-splat cohesion rate: %lf\n", sumCohesionRate / double(gsDataset.entries.size()));
