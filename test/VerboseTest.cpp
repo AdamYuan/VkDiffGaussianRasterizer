@@ -21,9 +21,26 @@ void WriteDL_DSplatsJSON(const std::filesystem::path &filename, const CuTileRast
 
 int main(int argc, char **argv) {
 	--argc, ++argv;
-	if (argc != 4) {
-		printf("./VerboseTest [3dgs.ply] [cameras.json] [width] [height]\n");
+	static constexpr int kStaticArgCount = 4;
+	static constexpr const char *kHelpString =
+	    "./VerboseTest [3dgs.ply] [cameras.json] [width] [height] (-w: write result) (-s: single)\n";
+	if (argc < kStaticArgCount) {
+		printf(kHelpString);
 		return EXIT_FAILURE;
+	}
+
+	bool writeResult = false;
+	bool single = false;
+	for (int i = kStaticArgCount; i < argc; ++i) {
+		auto arg = std::string{argv[i]};
+		if (arg == "-w")
+			writeResult = true;
+		else if (arg == "-s")
+			single = true;
+		else {
+			printf(kHelpString);
+			return EXIT_FAILURE;
+		}
 	}
 
 	myvk::Ptr<myvk::Device> pDevice;
@@ -111,6 +128,8 @@ int main(int argc, char **argv) {
 	CuTileRasterizer::BwdROArgs cuTileRasterBwdROArgs{};
 	CuTileRasterizer::BwdRWArgs cuTileRasterBwdRWArgs{};
 
+	printf("COUNT: %zu\n", gsDataset.entries.size());
+
 	for (auto &entry : gsDataset.entries) {
 		float widthRatio = float(width) / float(entry.camera.width);
 		entry.camera.focalX *= widthRatio;
@@ -163,9 +182,10 @@ int main(int argc, char **argv) {
 			vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource,
 			                         vkRasterVerboseQuery);
 		});
-		cuperftest::WritePixelsPNG(entry.imageName + "_verb_" + std::to_string(width) + "x" + std::to_string(height) +
-		                               ".png",
-		                           cuOutPixels, entry.camera.width, entry.camera.height);
+		if (writeResult)
+			cuperftest::WritePixelsPNG(entry.imageName + "_verb_" + std::to_string(width) + "x" +
+			                               std::to_string(height) + ".png",
+			                           cuOutPixels, entry.camera.width, entry.camera.height);
 
 		vkgsraster::Rasterizer::VerboseMetrics verbose = vkRasterVerboseQuery.GetMetrics();
 		printf("fragments: %d\n", verbose.fragmentCount);
@@ -174,7 +194,8 @@ int main(int argc, char **argv) {
 		       float(verbose.coherentFragmentCount) / float(verbose.fragmentCount));
 		printf("atomic adds: %d\n", verbose.atomicAddCount);
 
-		break; // Only run once
+		if (single)
+			break;
 	}
 	return 0;
 }
