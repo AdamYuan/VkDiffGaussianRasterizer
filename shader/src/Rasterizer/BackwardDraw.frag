@@ -90,6 +90,13 @@ void main() {
 	uvec4 subgroupReduceMask = subgroupBallot(!pixelDiscard);
 	bool subgroupCoherent = subgroupAllEqual(gIn.sortIdx);
 
+	if (gl_SubgroupInvocationID == subgroupBallotFindLSB(subgroupReduceMask)) {
+		uint count = subgroupBallotBitCount(subgroupReduceMask);
+		VERBOSE_ADD(FragmentCount, count);
+		if (subgroupCoherent)
+			VERBOSE_ADD(CoherentFragmentCount, count);
+	}
+
 	[[branch]]
 	if (subgroupCoherent && subgroupBallotBitCount(subgroupReduceMask) >= BALANCING_THRESHOLD) {
 		dL_dSplatView = subgroupReduceDL_DSplatView(dL_dSplatView);
@@ -103,9 +110,5 @@ void main() {
 	if (gl_SubgroupInvocationID == subgroupBallotFindLSB(subgroupReduceMask)) {
 		atomicAddDL_DSplatView(gIn.sortIdx, dL_dSplatView);
 		VERBOSE_ADD(AtomicAddCount, 1u);
-		uint count = subgroupBallotBitCount(subgroupReduceMask);
-		VERBOSE_ADD(FragmentCount, count);
-		if (subgroupCoherent)
-			VERBOSE_ADD(CoherentFragmentCount, count);
 	}
 }
