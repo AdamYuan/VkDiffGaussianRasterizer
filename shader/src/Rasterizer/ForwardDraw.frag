@@ -36,10 +36,6 @@ void main() {
 	}
 #endif
 
-	VERBOSE_ADD(FragmentCount);
-	if (cohesion)
-		VERBOSE_ADD(CoherentFragmentCount);
-
 	alpha = min(alpha, ALPHA_MAX);
 	gOutFragColor = vec4(color, alpha);
 }

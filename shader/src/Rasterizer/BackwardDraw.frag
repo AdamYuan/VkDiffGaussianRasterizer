@@ -88,9 +88,10 @@ void main() {
 
 	// Should not perform atomicAdd on helper lanes
 	uvec4 subgroupReduceMask = subgroupBallot(!pixelDiscard);
+	bool subgroupCoherent = subgroupAllEqual(gIn.sortIdx);
 
 	[[branch]]
-	if (subgroupAllEqual(gIn.sortIdx) && subgroupBallotBitCount(subgroupReduceMask) >= BALANCING_THRESHOLD) {
+	if (subgroupCoherent && subgroupBallotBitCount(subgroupReduceMask) >= BALANCING_THRESHOLD) {
 		dL_dSplatView = subgroupReduceDL_DSplatView(dL_dSplatView);
 	} else {
 		subgroupReduceMask &= gl_SubgroupEqMask;
@@ -101,6 +102,10 @@ void main() {
 
 	if (gl_SubgroupInvocationID == subgroupBallotFindLSB(subgroupReduceMask)) {
 		atomicAddDL_DSplatView(gIn.sortIdx, dL_dSplatView);
-		VERBOSE_ADD(AtomicAddCount);
+		VERBOSE_ADD(AtomicAddCount, 1u);
+		uint count = subgroupBallotBitCount(subgroupReduceMask);
+		VERBOSE_ADD(FragmentCount, count);
+		if (subgroupCoherent)
+			VERBOSE_ADD(CoherentFragmentCount, count);
 	}
 }

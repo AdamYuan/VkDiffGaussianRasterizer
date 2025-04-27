@@ -279,7 +279,7 @@ layout(std430, binding = SBUF_VERBOSE_COHERENT_FRAGMENT_COUNT_BINDING) buffer bV
 layout(std430, binding = SBUF_VERBOSE_ATOMIC_ADD_COUNT_BINDING) buffer bVerboseAtomicAddCount {
 	uint gVerboseAtomicAddCount[];
 };
-#define VERBOSE_ADD(NAME) atomicAdd(gVerbose##NAME[0], 1u)
+#define VERBOSE_ADD(NAME, COUNT) atomicAdd(gVerbose##NAME[0], COUNT)
 #endif
 
 #ifdef RASTERIZER_THREAD_GROUP_TILING_X
