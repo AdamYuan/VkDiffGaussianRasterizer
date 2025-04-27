@@ -130,6 +130,11 @@ int main(int argc, char **argv) {
 
 	printf("COUNT: %zu\n", gsDataset.entries.size());
 
+	double sumCohesionRate = 0, sumAtomicAddRate = 0;
+
+	if (single)
+		gsDataset.entries = {gsDataset.entries[0]};
+
 	for (auto &entry : gsDataset.entries) {
 		float widthRatio = float(width) / float(entry.camera.width);
 		entry.camera.focalX *= widthRatio;
@@ -190,12 +195,18 @@ int main(int argc, char **argv) {
 		vkgsraster::Rasterizer::VerboseMetrics verbose = vkRasterVerboseQuery.GetMetrics();
 		printf("fragments: %d\n", verbose.fragmentCount);
 		printf("coherent fragments: %d\n", verbose.coherentFragmentCount);
-		printf("subgroup-splat cohesion rate: %f\n",
-		       float(verbose.coherentFragmentCount) / float(verbose.fragmentCount));
+		double cohesionRate = double(verbose.coherentFragmentCount) / double(verbose.fragmentCount);
+		printf("subgroup-splat cohesion rate: %lf\n", cohesionRate);
 		printf("atomic adds: %d\n", verbose.atomicAddCount);
+		double atomicAddRate = double(verbose.atomicAddCount) / double(verbose.fragmentCount);
+		printf("atomic-add rate: %lf\n", atomicAddRate);
 
-		if (single)
-			break;
+		sumCohesionRate += cohesionRate;
+		sumAtomicAddRate += atomicAddRate;
 	}
+
+	printf("avg subgroup-splat cohesion rate: %lf\n", sumCohesionRate / double(gsDataset.entries.size()));
+	printf("avg atomic-add rate: %lf\n", sumAtomicAddRate / double(gsDataset.entries.size()));
+
 	return 0;
 }
