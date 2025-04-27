@@ -103,6 +103,7 @@ int main(int argc, char **argv) {
 	                                    vkGsModel.splatCount, createVkCuBuffer)
 	                      .GetSplatArgs(),
 	};
+	auto vkRasterVerboseQuery = vkgsraster::Rasterizer::VerboseQuery::Create(pDevice);
 
 	CuTileRasterizer::Resource cuTileRasterResource{};
 	CuTileRasterizer::FwdROArgs cuTileRasterFwdROArgs{};
@@ -141,6 +142,8 @@ int main(int argc, char **argv) {
 		cuTileRasterBwdRWArgs.Update(vkRasterBwdRWArgs);
 		float *cuOutPixels = cuTileRasterFwdRWArgs.outPixels;
 
+		vkRasterVerboseQuery.Reset();
+
 		// Vulkan
 		const auto runVkCommand = [&](auto &&cmdRun) {
 			pCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
@@ -151,14 +154,25 @@ int main(int argc, char **argv) {
 			pCommandPool->Reset();
 			pFence->Reset();
 		};
-		runVkCommand(
-		    [&] { vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource); });
+		runVkCommand([&] {
+			vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource,
+			                        vkRasterVerboseQuery);
+		});
 		cuperftest::ClearDL_DSplats(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
-		runVkCommand(
-		    [&] { vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource); });
+		runVkCommand([&] {
+			vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource,
+			                         vkRasterVerboseQuery);
+		});
 		cuperftest::WritePixelsPNG(entry.imageName + "_verb_" + std::to_string(width) + "x" + std::to_string(height) +
 		                               ".png",
 		                           cuOutPixels, entry.camera.width, entry.camera.height);
+
+		vkgsraster::Rasterizer::VerboseMetrics verbose = vkRasterVerboseQuery.GetMetrics();
+		printf("fragments: %d\n", verbose.fragmentCount);
+		printf("coherent fragments: %d\n", verbose.coherentFragmentCount);
+		printf("subgroup-splat cohesion rate: %f\n",
+		       float(verbose.coherentFragmentCount) / float(verbose.fragmentCount));
+		printf("atomic adds: %d\n", verbose.atomicAddCount);
 
 		break; // Only run once
 	}

@@ -136,6 +136,39 @@ Rasterizer::PerfMetrics Rasterizer::PerfQuery::GetMetrics() const {
 	};
 }
 
+Rasterizer::VerboseQuery Rasterizer::VerboseQuery::Create(const myvk::Ptr<myvk::Device> &pDevice) {
+	auto pFragmentCountBuffer = myvk::Buffer::Create(
+	    pDevice, sizeof(uint32_t), VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
+	    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+	auto pCoherentFragmentCountBuffer = myvk::Buffer::Create(
+	    pDevice, sizeof(uint32_t), VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
+	    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+	auto pAtomicAddCountBuffer = myvk::Buffer::Create(
+	    pDevice, sizeof(uint32_t), VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
+	    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+	VerboseQuery verboseQuery = {
+	    .pFragmentCountBuffer = pFragmentCountBuffer,
+	    .pCoherentFragmentCountBuffer = pCoherentFragmentCountBuffer,
+	    .pAtomicAddCountBuffer = pAtomicAddCountBuffer,
+	    .pFragmentCount = reinterpret_cast<uint32_t *>(pFragmentCountBuffer->GetMappedData()),
+	    .pCoherentFragmentCount = reinterpret_cast<uint32_t *>(pCoherentFragmentCountBuffer->GetMappedData()),
+	    .pAtomicAddCount = reinterpret_cast<uint32_t *>(pAtomicAddCountBuffer->GetMappedData()),
+	};
+	return verboseQuery;
+}
+void Rasterizer::VerboseQuery::Reset() const {
+	*pFragmentCount = 0u;
+	*pCoherentFragmentCount = 0u;
+	*pAtomicAddCount = 0u;
+}
+Rasterizer::VerboseMetrics Rasterizer::VerboseQuery::GetMetrics() const {
+	return VerboseMetrics{
+	    .fragmentCount = *pFragmentCount,
+	    .coherentFragmentCount = *pCoherentFragmentCount,
+	    .atomicAddCount = *pAtomicAddCount,
+	};
+}
+
 namespace {
 struct PushConstantData {
 	std::array<float, 3> bgColor;
@@ -281,6 +314,20 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 	         .descriptorCount = 1u,
 	         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT},
+
+	        // Verbose
+	        {.binding = SBUF_VERBOSE_FRAGMENT_COUNT_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+	        {.binding = SBUF_VERBOSE_COHERENT_FRAGMENT_COUNT_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+	        {.binding = SBUF_VERBOSE_ATOMIC_ADD_COUNT_BINDING,
+	         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+	         .descriptorCount = 1u,
+	         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
 	    },
 	    VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR);
 
@@ -435,7 +482,8 @@ Rasterizer::Rasterizer(const myvk::Ptr<myvk::Device> &pDevice, const Config &con
 }
 
 void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const FwdROArgs &roArgs,
-                            const FwdRWArgs &rwArgs, const Resource &resource, const PerfQuery &perfQuery) const {
+                            const FwdRWArgs &rwArgs, const Resource &resource, const VerboseQuery &verboseQuery,
+                            const PerfQuery &perfQuery) const {
 	std::vector descriptorSetWrites = {
 	    // Splats
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.splats.pMeanBuffer, SBUF_MEANS_BINDING),
@@ -466,6 +514,14 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 
 	    // Images
 	    myvk::DescriptorSetWrite::WriteStorageImage(nullptr, resource.pPixelTImageView, SIMG_PIXELS_TS_BINDING),
+
+	    // Verbose
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, verboseQuery.pFragmentCountBuffer,
+	                                                 SBUF_VERBOSE_FRAGMENT_COUNT_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, verboseQuery.pCoherentFragmentCountBuffer,
+	                                                 SBUF_VERBOSE_COHERENT_FRAGMENT_COUNT_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, verboseQuery.pAtomicAddCountBuffer,
+	                                                 SBUF_VERBOSE_ATOMIC_ADD_COUNT_BINDING),
 	};
 	if (!mConfig.forwardOutputImage) {
 		descriptorSetWrites.push_back(
@@ -654,7 +710,8 @@ void Rasterizer::CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer
 }
 
 void Rasterizer::CmdBackward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const BwdROArgs &roArgs,
-                             const BwdRWArgs &rwArgs, const Resource &resource, const PerfQuery &perfQuery) const {
+                             const BwdRWArgs &rwArgs, const Resource &resource, const VerboseQuery &verboseQuery,
+                             const PerfQuery &perfQuery) const {
 	std::vector descriptorSetWrites = {
 	    // Splats
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, roArgs.fwd.splats.pMeanBuffer, SBUF_MEANS_BINDING),
@@ -704,6 +761,14 @@ void Rasterizer::CmdBackward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffe
 	                                                 SBUF_DL_DCONICS_MEAN2DYS_BINDING),
 	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, resource.pDL_DViewOpacityBuffer,
 	                                                 SBUF_DL_DVIEW_OPACITIES_BINDING),
+
+	    // Verbose
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, verboseQuery.pFragmentCountBuffer,
+	                                                 SBUF_VERBOSE_FRAGMENT_COUNT_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, verboseQuery.pCoherentFragmentCountBuffer,
+	                                                 SBUF_VERBOSE_COHERENT_FRAGMENT_COUNT_BINDING),
+	    myvk::DescriptorSetWrite::WriteStorageBuffer(nullptr, verboseQuery.pAtomicAddCountBuffer,
+	                                                 SBUF_VERBOSE_ATOMIC_ADD_COUNT_BINDING),
 	};
 
 	PushConstantData pcData = {

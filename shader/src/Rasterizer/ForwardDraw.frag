@@ -1,11 +1,12 @@
 #version 460
 
-// #define DEBUG_SUBGROUP
+#define DEBUG_SUBGROUP
 
 #ifdef DEBUG_SUBGROUP
 #extension GL_KHR_shader_subgroup_vote : require
 #endif
 
+#define RASTERIZER_VERBOSE
 #include "Common.glsl"
 
 in bIn {
@@ -22,14 +23,23 @@ layout(location = 0) out vec4 gOutFragColor;
 
 void main() {
 	float alpha = quadPos2alpha(gIn.quadPos, gIn.opacity);
-#ifdef DEBUG_SUBGROUP
-	if (subgroupAllEqual(gIn.sortIdx))
-		alpha = 0;
-#endif
+	vec3 color = gIn.color;
+	bool cohesion = subgroupAllEqual(gIn.sortIdx);
 	bool pixelDiscard = alpha < ALPHA_MIN;
 	if (pixelDiscard)
 		discard;
 
+#ifdef DEBUG_SUBGROUP
+	if (!cohesion) {
+		color = vec3(1, 0, 0);
+		// alpha = 1.0;
+	}
+#endif
+
+	VERBOSE_ADD(FragmentCount);
+	if (cohesion)
+		VERBOSE_ADD(CoherentFragmentCount);
+
 	alpha = min(alpha, ALPHA_MAX);
-	gOutFragColor = vec4(gIn.color, alpha);
+	gOutFragColor = vec4(color, alpha);
 }

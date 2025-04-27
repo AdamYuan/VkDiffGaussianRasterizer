@@ -8,6 +8,7 @@
 
 #define RASTERIZER_ATOMICADD_DL_DSPLAT_VIEW
 #define RASTERIZER_REDUCE_DL_DSPLAT_VIEW
+#define RASTERIZER_VERBOSE
 #include "Common.glsl"
 
 in bIn {
@@ -98,6 +99,8 @@ void main() {
 		dL_dSplatView = quadReduceDL_DSplatView(dL_dSplatView);
 	}
 
-	if (gl_SubgroupInvocationID == subgroupBallotFindLSB(subgroupReduceMask))
+	if (gl_SubgroupInvocationID == subgroupBallotFindLSB(subgroupReduceMask)) {
 		atomicAddDL_DSplatView(gIn.sortIdx, dL_dSplatView);
+		VERBOSE_ADD(AtomicAddCount);
+	}
 }

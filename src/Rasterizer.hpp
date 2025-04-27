@@ -143,6 +143,18 @@ public:
 		PerfMetrics GetMetrics() const;
 	};
 
+	struct VerboseMetrics {
+		uint32_t fragmentCount, coherentFragmentCount, atomicAddCount;
+	};
+
+	struct VerboseQuery {
+		myvk::Ptr<myvk::BufferBase> pFragmentCountBuffer, pCoherentFragmentCountBuffer, pAtomicAddCountBuffer;
+		uint32_t *pFragmentCount{}, *pCoherentFragmentCount{}, *pAtomicAddCount{};
+		static VerboseQuery Create(const myvk::Ptr<myvk::Device> &pDevice);
+		void Reset() const;
+		VerboseMetrics GetMetrics() const;
+	};
+
 private:
 	Config mConfig;
 
@@ -177,9 +189,11 @@ public:
 	const Config &GetConfig() const { return mConfig; }
 
 	void CmdForward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const FwdROArgs &roArgs,
-	                const FwdRWArgs &rwArgs, const Resource &resource, const PerfQuery &perfQuery = {}) const;
+	                const FwdRWArgs &rwArgs, const Resource &resource, const VerboseQuery &verboseQuery,
+	                const PerfQuery &perfQuery = {}) const;
 	void CmdBackward(const myvk::Ptr<myvk::CommandBuffer> &pCommandBuffer, const BwdROArgs &roArgs,
-	                 const BwdRWArgs &rwArgs, const Resource &resource, const PerfQuery &perfQuery = {}) const;
+	                 const BwdRWArgs &rwArgs, const Resource &resource, const VerboseQuery &verboseQuery,
+	                 const PerfQuery &perfQuery = {}) const;
 
 	static const FwdRWArgsSyncState &GetSrcFwdRWArgsSync();
 	static const FwdRWArgsSyncState &GetDstFwdRWArgsSync();

@@ -4,7 +4,7 @@
 #define RASTERIZER_LOAD_SPLAT_QUAD
 #include "Common.glsl"
 
-// #define DEBUG_SUBGROUP
+#define DEBUG_SUBGROUP
 
 #define VERT_NUM 4
 const vec2[VERT_NUM] kVerts = {

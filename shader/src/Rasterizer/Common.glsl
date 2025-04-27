@@ -269,6 +269,19 @@ SplatView quadReduceDL_DSplatView(SplatView dL_dSplatView) {
 }
 #endif
 
+#ifdef RASTERIZER_VERBOSE
+layout(std430, binding = SBUF_VERBOSE_FRAGMENT_COUNT_BINDING) buffer bVerboseFragmentCount {
+	uint gVerboseFragmentCount[];
+};
+layout(std430, binding = SBUF_VERBOSE_COHERENT_FRAGMENT_COUNT_BINDING) buffer bVerboseCoherentFragmentCount {
+	uint gVerboseCoherentFragmentCount[];
+};
+layout(std430, binding = SBUF_VERBOSE_ATOMIC_ADD_COUNT_BINDING) buffer bVerboseAtomicAddCount {
+	uint gVerboseAtomicAddCount[];
+};
+#define VERBOSE_ADD(NAME) atomicAdd(gVerbose##NAME[0], 1u)
+#endif
+
 #ifdef RASTERIZER_THREAD_GROUP_TILING_X
 /*
  * Copyright (c) 2020-2024, NVIDIA CORPORATION. All rights reserved.
