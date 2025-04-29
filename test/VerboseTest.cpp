@@ -205,8 +205,8 @@ int main(int argc, char **argv) {
 				                         vkRasterVerboseQuery);
 			});
 			if (writeResult)
-				cuperftest::WritePixelsPNG(entry.imageName + "_verb_" + std::to_string(width) + "x" +
-				                               std::to_string(height) + ".png",
+				cuperftest::WritePixelsPNG(entry.imageName + "_verb_" + std::to_string(entry.camera.width) + "x" +
+				                               std::to_string(entry.camera.height) + ".png",
 				                           cuOutPixels, entry.camera.width, entry.camera.height);
 
 			vkgsraster::Rasterizer::VerboseMetrics verbose = vkRasterVerboseQuery.GetMetrics();
