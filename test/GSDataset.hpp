@@ -26,6 +26,8 @@ struct GSDataset {
 
 	static GSDataset Load(const std::filesystem::path &filename, uint32_t modelIteration = 7000);
 	bool IsEmpty() const { return scenes.empty(); }
+
+	void ResizeCamera(uint32_t width = 0, uint32_t height = 0);
 };
 
 #endif
