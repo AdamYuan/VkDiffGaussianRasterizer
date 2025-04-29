@@ -10,6 +10,7 @@
 #include <myvk/QueueSelector.hpp>
 
 static constexpr uint32_t kMaxWriteSplatCount = 128;
+static constexpr uint32_t kDefaultModelIteration = 7000;
 
 namespace cuperftest {
 void WritePixelsPNG(const std::filesystem::path &filename, const float *devicePixels, uint32_t width, uint32_t height);
@@ -23,12 +24,13 @@ int main(int argc, char **argv) {
 	--argc, ++argv;
 	static constexpr int kStaticArgCount = 1;
 	static constexpr const char *kHelpString =
-	    "./VerboseTest [dataset] (-w: write result) (-s: single)\n";
+	    "./VerboseTest [dataset] (-w=[width]) (-h=[height]) (-i=[model iteration]) (-w: write result) (-s: single)\n";
 	if (argc < kStaticArgCount) {
 		printf(kHelpString);
 		return EXIT_FAILURE;
 	}
 
+	uint32_t modelIteration = kDefaultModelIteration;
 	bool writeResult = false;
 	bool single = false;
 	for (int i = kStaticArgCount; i < argc; ++i) {
@@ -86,7 +88,7 @@ int main(int argc, char **argv) {
 		return VkCuBuffer::Create(pDevice, size, usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	};
 
-	GSDataset gsDataset = GSDataset::Load(argv[0]);
+	GSDataset gsDataset = GSDataset::Load(argv[0], modelIteration);
 	if (gsDataset.IsEmpty()) {
 		printf("Empty Dataset %s\n", argv[0]);
 		return EXIT_FAILURE;
@@ -94,7 +96,6 @@ int main(int argc, char **argv) {
 
 	vkgsraster::Rasterizer vkRasterizer{pDevice, {.forwardOutputImage = false}};
 	vkgsraster::Rasterizer::Resource vkRasterResource = {};
-	vkRasterResource.UpdateImage(pDevice, width, height, vkRasterizer);
 	vkgsraster::Rasterizer::PerfQuery vkRasterPerfQuery = vkgsraster::Rasterizer::PerfQuery::Create(pDevice);
 
 	CuTileRasterizer::Resource cuTileRasterResource{};
@@ -102,6 +103,7 @@ int main(int argc, char **argv) {
 	CuTileRasterizer::FwdRWArgs cuTileRasterFwdRWArgs{};
 	CuTileRasterizer::BwdROArgs cuTileRasterBwdROArgs{};
 	CuTileRasterizer::BwdRWArgs cuTileRasterBwdRWArgs{};
+	auto cuTileRasterPerfQuery = CuTileRasterizer::PerfQuery::Create();
 
 	uint32_t sumCount = 0;
 
@@ -137,12 +139,7 @@ int main(int argc, char **argv) {
 
 		for (uint32_t entryIdx = 0; auto &entry : scene.entries) {
 			printf("\n%s %d/%zu %s\n", scene.name.c_str(), entryIdx++, scene.entries.size(), entry.imageName.c_str());
-
-			float widthRatio = float(width) / float(entry.camera.width);
-			entry.camera.focalX *= widthRatio;
-			entry.camera.focalY *= widthRatio;
-			entry.camera.width = width;
-			entry.camera.height = height;
+			vkRasterResource.UpdateImage(pDevice, entry.camera.width, entry.camera.height, vkRasterizer);
 			vkRasterFwdROArgs.camera = entry.camera;
 			vkRasterBwdROArgs.fwd.camera = entry.camera;
 			std::size_t pixelBufferSize = 3 * entry.camera.width * entry.camera.height * sizeof(float);
@@ -178,18 +175,20 @@ int main(int argc, char **argv) {
 				pCommandPool->Reset();
 				pFence->Reset();
 			};
-			runVkCommand(
-				[&] { vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource); });
-			runVkCommand(
-				[&] { vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource); });
+			runVkCommand([&] {
+				vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource);
+			});
+			runVkCommand([&] {
+				vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource);
+			});
 			runVkCommand([&] {
 				vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource,
-					                    vkRasterPerfQuery);
+				                        vkRasterPerfQuery);
 			});
 			cuperftest::ClearDL_DSplats(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
 			runVkCommand([&] {
 				vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource,
-					                     vkRasterPerfQuery);
+				                         vkRasterPerfQuery);
 			});
 			auto vkRasterPerfMetrics = vkRasterPerfQuery.GetMetrics();
 			printf("vk_forward: %lf ms\n", vkRasterPerfMetrics.forward);
