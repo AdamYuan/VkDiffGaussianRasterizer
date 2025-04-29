@@ -55,3 +55,28 @@ GSDataset GSDataset::Load(const std::filesystem::path &filename, uint32_t modelI
 
 	return dataset;
 }
+
+void GSDataset::ResizeCamera(uint32_t width, uint32_t height) {
+	if (width == 0 && height == 0)
+		return;
+	for (auto &scene : scenes) {
+		for (auto &entry : scene.entries) {
+			float focalRatio;
+			if (width && height) {
+				entry.camera.width = width;
+				entry.camera.height = height;
+				focalRatio = float(width) / float(entry.camera.width);
+			} else if (width) {
+				entry.camera.height = entry.camera.height * width / entry.camera.width;
+				entry.camera.width = width;
+				focalRatio = float(width) / float(entry.camera.width);
+			} else {
+				entry.camera.width = entry.camera.width * height / entry.camera.height;
+				entry.camera.height = height;
+				focalRatio = float(height) / float(entry.camera.height);
+			}
+			entry.camera.focalX *= focalRatio;
+			entry.camera.focalY *= focalRatio;
+		}
+	}
+}
