@@ -21,9 +21,9 @@ void WriteDL_DSplatsJSON(const std::filesystem::path &filename, const CuTileRast
 
 int main(int argc, char **argv) {
 	--argc, ++argv;
-	static constexpr int kStaticArgCount = 4;
+	static constexpr int kStaticArgCount = 3;
 	static constexpr const char *kHelpString =
-	    "./VerboseTest [3dgs.ply] [cameras.json] [width] [height] (-w: write result) (-s: single)\n";
+	    "./VerboseTest [dataset] [width] [height] (-w: write result) (-s: single)\n";
 	if (argc < kStaticArgCount) {
 		printf(kHelpString);
 		return EXIT_FAILURE;
@@ -85,41 +85,17 @@ int main(int argc, char **argv) {
 	const auto createVkCuBuffer = [&](VkDeviceSize size, VkBufferUsageFlags usage) {
 		return VkCuBuffer::Create(pDevice, size, usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	};
-	VkGSModel vkGsModel = VkGSModel::Create(pGenericQueue, vkgsraster::Rasterizer::GetFwdArgsUsage().splatBuffers,
-	                                        GSModel::Load(argv[0]), createVkCuBuffer);
-	GSDataset gsDataset = GSDataset::Load(argv[1]);
-
-	uint32_t width = std::stoi(argv[2]), height = std::stoi(argv[3]);
-
-	if (vkGsModel.IsEmpty()) {
-		printf("Invalid 3DGS Model %s\n", argv[0]);
-		return EXIT_FAILURE;
-	}
+	GSDataset gsDataset = GSDataset::Load(argv[0]);
 	if (gsDataset.IsEmpty()) {
 		printf("Empty Dataset %s\n", argv[0]);
 		return EXIT_FAILURE;
 	}
 
-	printf("splatCount = %d\n", vkGsModel.splatCount);
+	uint32_t width = std::stoi(argv[1]), height = std::stoi(argv[2]);
 
 	vkgsraster::Rasterizer vkRasterizer{pDevice, {.forwardOutputImage = false}};
 	vkgsraster::Rasterizer::Resource vkRasterResource = {};
-	vkRasterResource.UpdateBuffer(pDevice, vkGsModel.splatCount);
 	vkRasterResource.UpdateImage(pDevice, width, height, vkRasterizer);
-	vkgsraster::Rasterizer::FwdROArgs vkRasterFwdROArgs = {
-	    .splatCount = vkGsModel.splatCount,
-	    .splats = vkGsModel.GetSplatArgs(),
-	    .bgColor = {1.0f, 1.0f, 1.0f},
-	};
-	vkgsraster::Rasterizer::FwdRWArgs vkRasterFwdRWArgs;
-	vkgsraster::Rasterizer::BwdROArgs vkRasterBwdROArgs = {
-	    .fwd = vkRasterFwdROArgs,
-	};
-	vkgsraster::Rasterizer::BwdRWArgs vkRasterBwdRWArgs = {
-	    .dL_dSplats = VkGSModel::Create(pDevice, vkgsraster::Rasterizer::GetBwdArgsUsage().dL_dSplatBuffers,
-	                                    vkGsModel.splatCount, createVkCuBuffer)
-	                      .GetSplatArgs(),
-	};
 	auto vkRasterVerboseQuery = vkgsraster::Rasterizer::VerboseQuery::Create(pDevice);
 
 	CuTileRasterizer::Resource cuTileRasterResource{};
@@ -128,86 +104,115 @@ int main(int argc, char **argv) {
 	CuTileRasterizer::BwdROArgs cuTileRasterBwdROArgs{};
 	CuTileRasterizer::BwdRWArgs cuTileRasterBwdRWArgs{};
 
+	uint32_t sumCount = 0;
 	double sumCohesionRate = 0, sumAtomicAddRate = 0;
 
-	if (single)
-		gsDataset.entries = {gsDataset.entries[0]};
+	for (auto &scene : gsDataset.scenes) {
+		VkGSModel vkGsModel = VkGSModel::Create(pGenericQueue, vkgsraster::Rasterizer::GetFwdArgsUsage().splatBuffers,
+		                                        GSModel::Load(scene.modelFilename), createVkCuBuffer);
 
-	for (uint32_t entryIdx = 0; auto &entry : gsDataset.entries) {
-		printf("%d/%zu\n", entryIdx, gsDataset.entries.size());
-
-		float widthRatio = float(width) / float(entry.camera.width);
-		entry.camera.focalX *= widthRatio;
-		entry.camera.focalY *= widthRatio;
-		entry.camera.width = width;
-		entry.camera.height = height;
-		printf("\n%s\n", entry.imageName.c_str());
-		vkRasterFwdROArgs.camera = entry.camera;
-		vkRasterBwdROArgs.fwd.camera = entry.camera;
-		std::size_t pixelBufferSize = 3 * entry.camera.width * entry.camera.height * sizeof(float);
-		if (!vkRasterFwdRWArgs.pOutPixelBuffer || vkRasterFwdRWArgs.pOutPixelBuffer->GetSize() < pixelBufferSize) {
-			vkRasterFwdRWArgs.pOutPixelBuffer =
-			    VkCuBuffer::Create(pDevice, pixelBufferSize, vkgsraster::Rasterizer::GetFwdArgsUsage().outPixelBuffer,
-			                       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-		}
-		if (!vkRasterBwdROArgs.pdL_dPixelBuffer || vkRasterBwdROArgs.pdL_dPixelBuffer->GetSize() < pixelBufferSize) {
-			auto pdL_dPixelBuffer =
-			    VkCuBuffer::Create(pDevice, pixelBufferSize, vkgsraster::Rasterizer::GetBwdArgsUsage().dL_dPixelBuffer,
-			                       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-			vkRasterBwdROArgs.pdL_dPixelBuffer = pdL_dPixelBuffer;
-
-			cuperftest::RandomPixels(pdL_dPixelBuffer->GetCudaMappedPtr<float>(), entry.camera.width,
-			                         entry.camera.height);
+		if (vkGsModel.IsEmpty()) {
+			printf("Invalid 3DGS Model %s\n", scene.modelFilename.c_str());
+			return EXIT_FAILURE;
 		}
 
-		cuTileRasterFwdROArgs.Update(vkRasterFwdROArgs);
-		cuTileRasterFwdRWArgs.Update(vkRasterFwdRWArgs);
-		cuTileRasterBwdROArgs.Update(cuTileRasterFwdROArgs, vkRasterBwdROArgs);
-		cuTileRasterBwdRWArgs.Update(vkRasterBwdRWArgs);
-		float *cuOutPixels = cuTileRasterFwdRWArgs.outPixels;
+		printf("%s splatCount = %d\n", scene.name.c_str(), vkGsModel.splatCount);
 
-		vkRasterVerboseQuery.Reset();
-
-		// Vulkan
-		const auto runVkCommand = [&](auto &&cmdRun) {
-			pCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-			cmdRun();
-			pCommandBuffer->End();
-			pCommandBuffer->Submit(pFence);
-			pFence->Wait();
-			pCommandPool->Reset();
-			pFence->Reset();
+		vkRasterResource.UpdateBuffer(pDevice, vkGsModel.splatCount, 0.0);
+		vkgsraster::Rasterizer::FwdROArgs vkRasterFwdROArgs = {
+		    .splatCount = vkGsModel.splatCount,
+		    .splats = vkGsModel.GetSplatArgs(),
+		    .bgColor = {1.0f, 1.0f, 1.0f},
 		};
-		runVkCommand([&] {
-			vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource,
-			                        vkRasterVerboseQuery);
-		});
-		cuperftest::ClearDL_DSplats(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
-		runVkCommand([&] {
-			vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource,
-			                         vkRasterVerboseQuery);
-		});
-		if (writeResult)
-			cuperftest::WritePixelsPNG(entry.imageName + "_verb_" + std::to_string(width) + "x" +
-			                               std::to_string(height) + ".png",
-			                           cuOutPixels, entry.camera.width, entry.camera.height);
+		vkgsraster::Rasterizer::FwdRWArgs vkRasterFwdRWArgs;
+		vkgsraster::Rasterizer::BwdROArgs vkRasterBwdROArgs = {
+		    .fwd = vkRasterFwdROArgs,
+		};
+		vkgsraster::Rasterizer::BwdRWArgs vkRasterBwdRWArgs = {
+		    .dL_dSplats = VkGSModel::Create(pDevice, vkgsraster::Rasterizer::GetBwdArgsUsage().dL_dSplatBuffers,
+		                                    vkGsModel.splatCount, createVkCuBuffer)
+		                      .GetSplatArgs(),
+		};
 
-		vkgsraster::Rasterizer::VerboseMetrics verbose = vkRasterVerboseQuery.GetMetrics();
-		printf("fragments: %d\n", verbose.fragmentCount);
-		printf("coherent fragments: %d\n", verbose.coherentFragmentCount);
-		double cohesionRate = double(verbose.coherentFragmentCount) / double(verbose.fragmentCount);
-		printf("subgroup-splat cohesion rate: %lf\n", cohesionRate);
-		printf("atomic adds: %d\n", verbose.atomicAddCount);
-		double atomicAddRate = double(verbose.atomicAddCount) / double(verbose.fragmentCount);
-		printf("atomic-add rate: %lf\n", atomicAddRate);
+		if (single)
+			scene.entries = {scene.entries[0]};
 
-		sumCohesionRate += cohesionRate;
-		sumAtomicAddRate += atomicAddRate;
-		++entryIdx;
+		for (uint32_t entryIdx = 0; auto &entry : scene.entries) {
+			printf("\n%s %d/%zu %s\n", scene.name.c_str(), entryIdx++, scene.entries.size(), entry.imageName.c_str());
+
+			float widthRatio = float(width) / float(entry.camera.width);
+			entry.camera.focalX *= widthRatio;
+			entry.camera.focalY *= widthRatio;
+			entry.camera.width = width;
+			entry.camera.height = height;
+			vkRasterFwdROArgs.camera = entry.camera;
+			vkRasterBwdROArgs.fwd.camera = entry.camera;
+			std::size_t pixelBufferSize = 3 * entry.camera.width * entry.camera.height * sizeof(float);
+			if (!vkRasterFwdRWArgs.pOutPixelBuffer || vkRasterFwdRWArgs.pOutPixelBuffer->GetSize() < pixelBufferSize) {
+				vkRasterFwdRWArgs.pOutPixelBuffer = VkCuBuffer::Create(
+				    pDevice, pixelBufferSize, vkgsraster::Rasterizer::GetFwdArgsUsage().outPixelBuffer,
+				    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+			}
+			if (!vkRasterBwdROArgs.pdL_dPixelBuffer ||
+			    vkRasterBwdROArgs.pdL_dPixelBuffer->GetSize() < pixelBufferSize) {
+				auto pdL_dPixelBuffer = VkCuBuffer::Create(pDevice, pixelBufferSize,
+				                                           vkgsraster::Rasterizer::GetBwdArgsUsage().dL_dPixelBuffer,
+				                                           VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+				vkRasterBwdROArgs.pdL_dPixelBuffer = pdL_dPixelBuffer;
+
+				cuperftest::RandomPixels(pdL_dPixelBuffer->GetCudaMappedPtr<float>(), entry.camera.width,
+				                         entry.camera.height);
+			}
+
+			cuTileRasterFwdROArgs.Update(vkRasterFwdROArgs);
+			cuTileRasterFwdRWArgs.Update(vkRasterFwdRWArgs);
+			cuTileRasterBwdROArgs.Update(cuTileRasterFwdROArgs, vkRasterBwdROArgs);
+			cuTileRasterBwdRWArgs.Update(vkRasterBwdRWArgs);
+			float *cuOutPixels = cuTileRasterFwdRWArgs.outPixels;
+
+			vkRasterVerboseQuery.Reset();
+
+			// Vulkan
+			const auto runVkCommand = [&](auto &&cmdRun) {
+				pCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+				cmdRun();
+				pCommandBuffer->End();
+				pCommandBuffer->Submit(pFence);
+				pFence->Wait();
+				pCommandPool->Reset();
+				pFence->Reset();
+			};
+			runVkCommand([&] {
+				vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource,
+				                        vkRasterVerboseQuery);
+			});
+			cuperftest::ClearDL_DSplats(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
+			runVkCommand([&] {
+				vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource,
+				                         vkRasterVerboseQuery);
+			});
+			if (writeResult)
+				cuperftest::WritePixelsPNG(entry.imageName + "_verb_" + std::to_string(width) + "x" +
+				                               std::to_string(height) + ".png",
+				                           cuOutPixels, entry.camera.width, entry.camera.height);
+
+			vkgsraster::Rasterizer::VerboseMetrics verbose = vkRasterVerboseQuery.GetMetrics();
+			printf("fragments: %d\n", verbose.fragmentCount);
+			printf("coherent fragments: %d\n", verbose.coherentFragmentCount);
+			double cohesionRate = double(verbose.coherentFragmentCount) / double(verbose.fragmentCount);
+			printf("subgroup-splat cohesion rate: %lf\n", cohesionRate);
+			printf("atomic adds: %d\n", verbose.atomicAddCount);
+			double atomicAddRate = double(verbose.atomicAddCount) / double(verbose.fragmentCount);
+			printf("atomic-add rate: %lf\n", atomicAddRate);
+
+			sumCohesionRate += cohesionRate;
+			sumAtomicAddRate += atomicAddRate;
+			++sumCount;
+		}
 	}
 
-	printf("avg subgroup-splat cohesion rate: %lf\n", sumCohesionRate / double(gsDataset.entries.size()));
-	printf("avg atomic-add rate: %lf\n", sumAtomicAddRate / double(gsDataset.entries.size()));
+	printf("avg subgroup-splat cohesion rate: %lf\n", sumCohesionRate / double(sumCount));
+	printf("avg atomic-add rate: %lf\n", sumAtomicAddRate / double(sumCount));
 
 	return 0;
 }
