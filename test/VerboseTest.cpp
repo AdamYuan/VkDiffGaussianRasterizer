@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
 	const auto createVkCuBuffer = [&](VkDeviceSize size, VkBufferUsageFlags usage) {
 		return VkCuBuffer::Create(pDevice, size, usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	};
-	GSDataset gsDataset = GSDataset::Load(argv[0]);
+	GSDataset gsDataset = GSDataset::Load(argv[0], modelIteration);
 	if (gsDataset.IsEmpty()) {
 		printf("Empty Dataset %s\n", argv[0]);
 		return EXIT_FAILURE;
@@ -116,7 +116,6 @@ int main(int argc, char **argv) {
 	vkgsraster::Rasterizer::Resource vkRasterResource = {};
 	auto vkRasterVerboseQuery = vkgsraster::Rasterizer::VerboseQuery::Create(pDevice);
 
-	CuTileRasterizer::Resource cuTileRasterResource{};
 	CuTileRasterizer::FwdROArgs cuTileRasterFwdROArgs{};
 	CuTileRasterizer::FwdRWArgs cuTileRasterFwdRWArgs{};
 	CuTileRasterizer::BwdROArgs cuTileRasterBwdROArgs{};
