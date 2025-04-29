@@ -10,6 +10,7 @@
 #include <myvk/QueueSelector.hpp>
 
 static constexpr uint32_t kMaxWriteSplatCount = 128;
+static constexpr uint32_t kDefaultModelIteration = 7000;
 
 namespace cuperftest {
 void WritePixelsPNG(const std::filesystem::path &filename, const float *devicePixels, uint32_t width, uint32_t height);
@@ -21,22 +22,41 @@ void WriteDL_DSplatsJSON(const std::filesystem::path &filename, const CuTileRast
 
 int main(int argc, char **argv) {
 	--argc, ++argv;
-	static constexpr int kStaticArgCount = 3;
+	static constexpr int kStaticArgCount = 1;
 	static constexpr const char *kHelpString =
-	    "./VerboseTest [dataset] [width] [height] (-w: write result) (-s: single)\n";
+	    "./VerboseTest [dataset] (-w=[width]) (-h=[height]) (-i=[model iteration]) (-w: write result) (-s: single)\n";
 	if (argc < kStaticArgCount) {
 		printf(kHelpString);
 		return EXIT_FAILURE;
 	}
 
+	uint32_t modelIteration = kDefaultModelIteration;
+	uint32_t resizeWidth = 0, resizeHeight = 0;
 	bool writeResult = false;
 	bool single = false;
 	for (int i = kStaticArgCount; i < argc; ++i) {
 		auto arg = std::string{argv[i]};
+		std::string val;
+
+		const auto getValue = [](const std::string &arg, const std::string &prefix, std::string &value) -> bool {
+			if (arg.length() <= prefix.length())
+				return false;
+			if (arg.substr(0, prefix.length()) != prefix)
+				return false;
+			value = arg.substr(prefix.length());
+			return true;
+		};
+
 		if (arg == "-w")
 			writeResult = true;
 		else if (arg == "-s")
 			single = true;
+		else if (getValue(arg, "-w=", val))
+			resizeWidth = std::stoul(val);
+		else if (getValue(arg, "-h=", val))
+			resizeHeight = std::stoul(val);
+		else if (getValue(arg, "-i=", val))
+			modelIteration = std::stoul(val);
 		else {
 			printf(kHelpString);
 			return EXIT_FAILURE;
@@ -90,12 +110,10 @@ int main(int argc, char **argv) {
 		printf("Empty Dataset %s\n", argv[0]);
 		return EXIT_FAILURE;
 	}
-
-	uint32_t width = std::stoi(argv[1]), height = std::stoi(argv[2]);
+	gsDataset.ResizeCamera(resizeWidth, resizeHeight);
 
 	vkgsraster::Rasterizer vkRasterizer{pDevice, {.forwardOutputImage = false}};
 	vkgsraster::Rasterizer::Resource vkRasterResource = {};
-	vkRasterResource.UpdateImage(pDevice, width, height, vkRasterizer);
 	auto vkRasterVerboseQuery = vkgsraster::Rasterizer::VerboseQuery::Create(pDevice);
 
 	CuTileRasterizer::Resource cuTileRasterResource{};
@@ -116,7 +134,7 @@ int main(int argc, char **argv) {
 			return EXIT_FAILURE;
 		}
 
-		printf("%s splatCount = %d\n", scene.name.c_str(), vkGsModel.splatCount);
+		printf("model: %s\nsplatCount = %d\n", scene.modelFilename.c_str(), vkGsModel.splatCount);
 
 		vkRasterResource.UpdateBuffer(pDevice, vkGsModel.splatCount, 0.0);
 		vkgsraster::Rasterizer::FwdROArgs vkRasterFwdROArgs = {
@@ -139,12 +157,7 @@ int main(int argc, char **argv) {
 
 		for (uint32_t entryIdx = 0; auto &entry : scene.entries) {
 			printf("\n%s %d/%zu %s\n", scene.name.c_str(), entryIdx++, scene.entries.size(), entry.imageName.c_str());
-
-			float widthRatio = float(width) / float(entry.camera.width);
-			entry.camera.focalX *= widthRatio;
-			entry.camera.focalY *= widthRatio;
-			entry.camera.width = width;
-			entry.camera.height = height;
+			vkRasterResource.UpdateImage(pDevice, entry.camera.width, entry.camera.height, vkRasterizer);
 			vkRasterFwdROArgs.camera = entry.camera;
 			vkRasterBwdROArgs.fwd.camera = entry.camera;
 			std::size_t pixelBufferSize = 3 * entry.camera.width * entry.camera.height * sizeof(float);
