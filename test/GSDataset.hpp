@@ -13,14 +13,19 @@
 #include <vector>
 
 struct GSDataset {
-	struct Entry {
-		vkgsraster::Rasterizer::CameraArgs camera;
-		std::string imageName;
+	struct Scene {
+		std::string name;
+		std::filesystem::path modelFilename;
+		struct Entry {
+			vkgsraster::Rasterizer::CameraArgs camera;
+			std::string imageName;
+		};
+		std::vector<Entry> entries;
 	};
-	std::vector<Entry> entries;
+	std::vector<Scene> scenes;
 
-	static GSDataset Load(const std::filesystem::path &filename);
-	bool IsEmpty() const { return entries.empty(); }
+	static GSDataset Load(const std::filesystem::path &filename, uint32_t modelIteration = 7000);
+	bool IsEmpty() const { return scenes.empty(); }
 };
 
 #endif
