@@ -63,17 +63,17 @@ void GSDataset::ResizeCamera(uint32_t width, uint32_t height) {
 		for (auto &entry : scene.entries) {
 			float focalRatio;
 			if (width && height) {
+				focalRatio = float(width) / float(entry.camera.width);
 				entry.camera.width = width;
 				entry.camera.height = height;
-				focalRatio = float(width) / float(entry.camera.width);
 			} else if (width) {
+				focalRatio = float(width) / float(entry.camera.width);
 				entry.camera.height = entry.camera.height * width / entry.camera.width;
 				entry.camera.width = width;
-				focalRatio = float(width) / float(entry.camera.width);
 			} else {
+				focalRatio = float(height) / float(entry.camera.height);
 				entry.camera.width = entry.camera.width * height / entry.camera.height;
 				entry.camera.height = height;
-				focalRatio = float(height) / float(entry.camera.height);
 			}
 			entry.camera.focalX *= focalRatio;
 			entry.camera.focalY *= focalRatio;
