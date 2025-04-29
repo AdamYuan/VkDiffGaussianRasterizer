@@ -31,14 +31,32 @@ int main(int argc, char **argv) {
 	}
 
 	uint32_t modelIteration = kDefaultModelIteration;
+	uint32_t resizeWidth = 0, resizeHeight = 0;
 	bool writeResult = false;
 	bool single = false;
 	for (int i = kStaticArgCount; i < argc; ++i) {
 		auto arg = std::string{argv[i]};
+		std::string val;
+
+		const auto getValue = [](const std::string &arg, const std::string &prefix, std::string &value) -> bool {
+			if (arg.length() <= prefix.length())
+				return false;
+			if (arg.substr(0, prefix.length()) != prefix)
+				return false;
+			value = arg.substr(prefix.length());
+			return true;
+		};
+
 		if (arg == "-w")
 			writeResult = true;
 		else if (arg == "-s")
 			single = true;
+		else if (getValue(arg, "-w=", val))
+			resizeWidth = std::stoul(val);
+		else if (getValue(arg, "-h=", val))
+			resizeHeight = std::stoul(val);
+		else if (getValue(arg, "-i=", val))
+			modelIteration = std::stoul(val);
 		else {
 			printf(kHelpString);
 			return EXIT_FAILURE;
@@ -93,6 +111,7 @@ int main(int argc, char **argv) {
 		printf("Empty Dataset %s\n", argv[0]);
 		return EXIT_FAILURE;
 	}
+	gsDataset.ResizeCamera(resizeWidth, resizeHeight);
 
 	vkgsraster::Rasterizer vkRasterizer{pDevice, {.forwardOutputImage = false}};
 	vkgsraster::Rasterizer::Resource vkRasterResource = {};
@@ -116,7 +135,7 @@ int main(int argc, char **argv) {
 			return EXIT_FAILURE;
 		}
 
-		printf("%s splatCount = %d\n", scene.name.c_str(), vkGsModel.splatCount);
+		printf("model: %s\nsplatCount = %d\n", scene.modelFilename.c_str(), vkGsModel.splatCount);
 
 		vkRasterResource.UpdateBuffer(pDevice, vkGsModel.splatCount, 0.0);
 		vkgsraster::Rasterizer::FwdROArgs vkRasterFwdROArgs = {
