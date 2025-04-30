@@ -23,8 +23,8 @@ void WriteDL_DSplatsJSON(const std::filesystem::path &filename, const CuTileRast
 int main(int argc, char **argv) {
 	--argc, ++argv;
 	static constexpr int kStaticArgCount = 1;
-	static constexpr const char *kHelpString =
-	    "./VerboseTest [dataset] (-w=[width]) (-h=[height]) (-i=[model iteration]) (-w: write result) (-s: single)\n";
+	static constexpr const char *kHelpString = "./VerboseTest [dataset] (-w=[width]) (-h=[height]) (-i=[model "
+	                                           "iteration]) (-w: write result) (-s: single) (-nocu) (-novk)\n";
 	if (argc < kStaticArgCount) {
 		printf(kHelpString);
 		return EXIT_FAILURE;
@@ -34,6 +34,7 @@ int main(int argc, char **argv) {
 	uint32_t resizeWidth = 0, resizeHeight = 0;
 	bool writeResult = false;
 	bool single = false;
+	bool noCu = false, noVk = false;
 	for (int i = kStaticArgCount; i < argc; ++i) {
 		auto arg = std::string{argv[i]};
 		std::string val;
@@ -51,6 +52,10 @@ int main(int argc, char **argv) {
 			writeResult = true;
 		else if (arg == "-s")
 			single = true;
+		else if (arg == "-nocu")
+			noCu = true;
+		else if (arg == "-novk")
+			noVk = true;
 		else if (getValue(arg, "-w=", val))
 			resizeWidth = std::stoul(val);
 		else if (getValue(arg, "-h=", val))
@@ -125,6 +130,8 @@ int main(int argc, char **argv) {
 	auto cuTileRasterPerfQuery = CuTileRasterizer::PerfQuery::Create();
 
 	uint32_t sumCount = 0;
+	double sumCuForward = 0, sumVkForward = 0, sumCuBackward = 0, sumVkBackward = 0;
+	double sumVkBackwardDraw = 0;
 
 	for (auto &scene : gsDataset.scenes) {
 		VkGSModel vkGsModel = VkGSModel::Create(pGenericQueue, vkgsraster::Rasterizer::GetFwdArgsUsage().splatBuffers,
@@ -137,7 +144,8 @@ int main(int argc, char **argv) {
 
 		printf("model: %s\nsplatCount = %d\n", scene.modelFilename.c_str(), vkGsModel.splatCount);
 
-		vkRasterResource.UpdateBuffer(pDevice, vkGsModel.splatCount, 0.0);
+		if (!noVk)
+			vkRasterResource.UpdateBuffer(pDevice, vkGsModel.splatCount, 0.0);
 		vkgsraster::Rasterizer::FwdROArgs vkRasterFwdROArgs = {
 		    .splatCount = vkGsModel.splatCount,
 		    .splats = vkGsModel.GetSplatArgs(),
@@ -158,7 +166,6 @@ int main(int argc, char **argv) {
 
 		for (uint32_t entryIdx = 0; auto &entry : scene.entries) {
 			printf("\n%s %d/%zu %s\n", scene.name.c_str(), entryIdx++, scene.entries.size(), entry.imageName.c_str());
-			vkRasterResource.UpdateImage(pDevice, entry.camera.width, entry.camera.height, vkRasterizer);
 			vkRasterFwdROArgs.camera = entry.camera;
 			vkRasterBwdROArgs.fwd.camera = entry.camera;
 			std::size_t pixelBufferSize = 3 * entry.camera.width * entry.camera.height * sizeof(float);
@@ -185,71 +192,100 @@ int main(int argc, char **argv) {
 			float *cuOutPixels = cuTileRasterFwdRWArgs.outPixels;
 
 			// Vulkan
-			const auto runVkCommand = [&](auto &&cmdRun) {
-				pCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-				cmdRun();
-				pCommandBuffer->End();
-				pCommandBuffer->Submit(pFence);
-				pFence->Wait();
-				pCommandPool->Reset();
-				pFence->Reset();
-			};
-			runVkCommand([&] {
-				vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource);
-			});
-			runVkCommand([&] {
-				vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource);
-			});
-			runVkCommand([&] {
-				vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource,
-				                        vkRasterPerfQuery);
-			});
-			cuperftest::ClearDL_DSplats(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
-			runVkCommand([&] {
-				vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource,
-				                         vkRasterPerfQuery);
-			});
-			auto vkRasterPerfMetrics = vkRasterPerfQuery.GetMetrics();
-			printf("vk_forward: %lf ms\n", vkRasterPerfMetrics.forward);
-			printf("vk_backward: %lf ms\n", vkRasterPerfMetrics.backward);
-			printf("vk: %lf ms\n", vkRasterPerfMetrics.forward + vkRasterPerfMetrics.backward);
-			if (writeResult) {
-				cuperftest::WritePixelsPNG(entry.imageName + "_vk.png", cuOutPixels, entry.camera.width,
-				                           entry.camera.height);
-				cuperftest::WriteDL_DSplatsJSON(entry.imageName + "_vk.json", cuTileRasterBwdRWArgs.dL_dSplats,
-				                                std::min(vkGsModel.splatCount, kMaxWriteSplatCount));
+			vkgsraster::Rasterizer::PerfMetrics vkRasterPerfMetrics{};
+			if (!noVk) {
+				vkRasterResource.UpdateImage(pDevice, entry.camera.width, entry.camera.height, vkRasterizer);
+				const auto runVkCommand = [&](auto &&cmdRun) {
+					pCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+					cmdRun();
+					pCommandBuffer->End();
+					pCommandBuffer->Submit(pFence);
+					pFence->Wait();
+					pCommandPool->Reset();
+					pFence->Reset();
+				};
+				runVkCommand([&] {
+					vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource);
+				});
+				runVkCommand([&] {
+					vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource);
+				});
+				runVkCommand([&] {
+					vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource,
+					                        vkRasterPerfQuery);
+				});
+				cuperftest::ClearDL_DSplats(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
+				runVkCommand([&] {
+					vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource,
+					                         vkRasterPerfQuery);
+				});
+
+				if (writeResult) {
+					cuperftest::WritePixelsPNG(entry.imageName + "_vk.png", cuOutPixels, entry.camera.width,
+					                           entry.camera.height);
+					cuperftest::WriteDL_DSplatsJSON(entry.imageName + "_vk.json", cuTileRasterBwdRWArgs.dL_dSplats,
+					                                std::min(vkGsModel.splatCount, kMaxWriteSplatCount));
+				}
+				vkRasterPerfMetrics = vkRasterPerfQuery.GetMetrics();
+				printf("vk_forward: %lf ms\n", vkRasterPerfMetrics.forward);
+				printf("vk_backward: %lf ms\n", vkRasterPerfMetrics.backward);
+				printf("vk_backward draw: %lf ms\n", vkRasterPerfMetrics.backwardDraw);
+				printf("vk: %lf ms\n", vkRasterPerfMetrics.forward + vkRasterPerfMetrics.backward);
 			}
 
 			// Cuda
-			CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource);
-			CuTileRasterizer::Backward(cuTileRasterBwdROArgs, cuTileRasterBwdRWArgs, cuTileRasterResource);
+			CuTileRasterizer::PerfMetrics cuTileRasterPerfMetrics{};
+			if (!noCu) {
+				CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource);
+				CuTileRasterizer::Backward(cuTileRasterBwdROArgs, cuTileRasterBwdRWArgs, cuTileRasterResource);
 
-			CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource,
-			                          cuTileRasterPerfQuery);
-			cuperftest::ClearDL_DSplats(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
-			CuTileRasterizer::Backward(cuTileRasterBwdROArgs, cuTileRasterBwdRWArgs, cuTileRasterResource,
-			                           cuTileRasterPerfQuery);
-			auto cuTileRasterPerfMetrics = cuTileRasterPerfQuery.GetMetrics();
-			printf("cu_forward: %lf ms (numRendered = %d)\n", cuTileRasterPerfMetrics.forward,
-			       cuTileRasterResource.numRendered);
-			printf("cu_backward: %lf ms\n", cuTileRasterPerfMetrics.backward);
-			printf("cu: %lf ms\n", cuTileRasterPerfMetrics.forward + cuTileRasterPerfMetrics.backward);
-			if (writeResult) {
-				cuperftest::WritePixelsPNG(entry.imageName + "_cu.png", cuOutPixels, entry.camera.width,
-				                           entry.camera.height);
-				cuperftest::WriteDL_DSplatsJSON(entry.imageName + "_cu.json", cuTileRasterBwdRWArgs.dL_dSplats,
-				                                std::min(vkGsModel.splatCount, kMaxWriteSplatCount));
+				CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource,
+				                          cuTileRasterPerfQuery);
+				cuperftest::ClearDL_DSplats(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
+				CuTileRasterizer::Backward(cuTileRasterBwdROArgs, cuTileRasterBwdRWArgs, cuTileRasterResource,
+				                           cuTileRasterPerfQuery);
+				if (writeResult) {
+					cuperftest::WritePixelsPNG(entry.imageName + "_cu.png", cuOutPixels, entry.camera.width,
+					                           entry.camera.height);
+					cuperftest::WriteDL_DSplatsJSON(entry.imageName + "_cu.json", cuTileRasterBwdRWArgs.dL_dSplats,
+					                                std::min(vkGsModel.splatCount, kMaxWriteSplatCount));
+				}
+				cuTileRasterPerfMetrics = cuTileRasterPerfQuery.GetMetrics();
+				printf("cu_forward: %lf ms (numRendered = %d)\n", cuTileRasterPerfMetrics.forward,
+				       cuTileRasterResource.numRendered);
+				printf("cu_backward: %lf ms\n", cuTileRasterPerfMetrics.backward);
+				printf("cu: %lf ms\n", cuTileRasterPerfMetrics.forward + cuTileRasterPerfMetrics.backward);
 			}
 
-			// Speed Up
-			printf("speedup_forward: %lf\n", cuTileRasterPerfMetrics.forward / vkRasterPerfMetrics.forward);
-			printf("speedup_backward: %lf\n", cuTileRasterPerfMetrics.backward / vkRasterPerfMetrics.backward);
-			printf("speedup: %lf\n", (cuTileRasterPerfMetrics.forward + cuTileRasterPerfMetrics.backward) /
-			                             (vkRasterPerfMetrics.forward + vkRasterPerfMetrics.backward));
+			if (!noCu && !noVk) {
+				// Speed Up
+				printf("speedup_forward: %lf\n", cuTileRasterPerfMetrics.forward / vkRasterPerfMetrics.forward);
+				printf("speedup_backward: %lf\n", cuTileRasterPerfMetrics.backward / vkRasterPerfMetrics.backward);
+				printf("speedup: %lf\n", (cuTileRasterPerfMetrics.forward + cuTileRasterPerfMetrics.backward) /
+				                             (vkRasterPerfMetrics.forward + vkRasterPerfMetrics.backward));
+			}
 
 			++sumCount;
+			sumCuForward += cuTileRasterPerfMetrics.forward;
+			sumCuBackward += cuTileRasterPerfMetrics.backward;
+			sumVkForward += vkRasterPerfMetrics.forward;
+			sumVkBackward += vkRasterPerfMetrics.backward;
+			sumVkBackwardDraw += vkRasterPerfMetrics.backwardDraw;
 		}
 	}
+
+	printf("avg vk_forward: %lf ms\n", sumVkForward / double(sumCount));
+	printf("avg vk_backward: %lf ms\n", sumVkBackward / double(sumCount));
+	printf("avg vk_backward draw: %lf ms\n", sumVkBackwardDraw / double(sumCount));
+	printf("avg vk: %lf ms\n", (sumVkForward + sumVkBackward) / double(sumCount));
+
+	printf("avg cu_forward: %lf ms\n", sumCuForward / double(sumCount));
+	printf("avg cu_backward: %lf ms\n", sumCuBackward / double(sumCount));
+	printf("avg cu: %lf ms\n", (sumCuForward + sumCuBackward) / double(sumCount));
+
+	printf("speedup_forward: %lf\n", sumCuForward / sumVkForward);
+	printf("speedup_backward: %lf\n", sumCuBackward / sumVkBackward);
+	printf("speedup: %lf\n", (sumCuForward + sumCuBackward) / (sumVkForward + sumVkBackward));
 
 	return 0;
 }
