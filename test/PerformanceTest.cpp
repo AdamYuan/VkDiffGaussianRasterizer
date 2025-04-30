@@ -8,6 +8,7 @@
 #include <myvk/Instance.hpp>
 #include <myvk/Queue.hpp>
 #include <myvk/QueueSelector.hpp>
+#include <random>
 
 static constexpr uint32_t kMaxWriteSplatCount = 128;
 static constexpr uint32_t kDefaultModelIteration = 7000;
@@ -23,8 +24,9 @@ void WriteDL_DSplatsJSON(const std::filesystem::path &filename, const CuTileRast
 int main(int argc, char **argv) {
 	--argc, ++argv;
 	static constexpr int kStaticArgCount = 1;
-	static constexpr const char *kHelpString = "./VerboseTest [dataset] (-w=[width]) (-h=[height]) (-i=[model "
-	                                           "iteration]) (-w: write result) (-s: single) (-nocu) (-novk)\n";
+	static constexpr const char *kHelpString =
+	    "./VerboseTest [dataset] (-w=[width]) (-h=[height]) (-i=[model "
+	    "iteration]) (-e=[entries per scene]) (-w: write result) (-s: single) (-nocu) (-novk)\n";
 	if (argc < kStaticArgCount) {
 		printf(kHelpString);
 		return EXIT_FAILURE;
@@ -32,6 +34,7 @@ int main(int argc, char **argv) {
 
 	uint32_t modelIteration = kDefaultModelIteration;
 	uint32_t resizeWidth = 0, resizeHeight = 0;
+	uint32_t entriesPerScene = 0;
 	bool writeResult = false;
 	bool single = false;
 	bool noCu = false, noVk = false;
@@ -62,6 +65,8 @@ int main(int argc, char **argv) {
 			resizeHeight = std::stoul(val);
 		else if (getValue(arg, "-i=", val))
 			modelIteration = std::stoul(val);
+		else if (getValue(arg, "-e=", val))
+			entriesPerScene = std::stoul(val);
 		else {
 			printf(kHelpString);
 			return EXIT_FAILURE;
@@ -117,6 +122,10 @@ int main(int argc, char **argv) {
 		return EXIT_FAILURE;
 	}
 	gsDataset.ResizeCamera(resizeWidth, resizeHeight);
+	if (entriesPerScene) {
+		std::mt19937 randGen{};
+		gsDataset.RandomCrop(randGen, entriesPerScene);
+	}
 
 	vkgsraster::Rasterizer vkRasterizer{pDevice, {.forwardOutputImage = false}};
 	vkgsraster::Rasterizer::Resource vkRasterResource = {};
