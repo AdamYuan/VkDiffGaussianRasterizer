@@ -8,6 +8,7 @@
 
 #include "../src/Rasterizer.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -28,6 +29,14 @@ struct GSDataset {
 	bool IsEmpty() const { return scenes.empty(); }
 
 	void ResizeCamera(uint32_t width = 0, uint32_t height = 0);
+	void RandomCrop(auto &&randGen, uint32_t entriesPerScene = 0) {
+		for (auto &scene : scenes) {
+			if (scene.entries.size() <= entriesPerScene)
+				continue;
+			std::shuffle(scene.entries.begin(), scene.entries.end(), randGen);
+			scene.entries.erase(scene.entries.begin() + entriesPerScene, scene.entries.end());
+		}
+	}
 };
 
 #endif
