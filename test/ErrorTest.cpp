@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
 	--argc, ++argv;
 	static constexpr int kStaticArgCount = 1;
 	static constexpr const char *kHelpString =
-	    "./VerboseTest [dataset] (-w=[width]) (-h=[height]) (-i=[model "
+	    "./ErrorTest [dataset] (-w=[width]) (-h=[height]) (-i=[model "
 	    "iteration]) (-e=[entries per scene]) (-w: write result) (-s: single) (-nocu) (-novk)\n";
 	if (argc < kStaticArgCount) {
 		printf(kHelpString);
