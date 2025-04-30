@@ -51,7 +51,7 @@ void main() {
 		vec4 pixel_T = imageLoad(gPixels_Ts, coord);
 		pixel_i = pixel_T.xyz;
 		T_i = pixel_T.w;
-		TDiscard = T_i < T_MIN;
+		TDiscard = false;
 		if (!TDiscard) {
 			float T_i1 = T_i * oneMinusAlpha;
 			vec3 pixel_i1 = pixel_i - T_i * alphaColor;
