@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
 	--argc, ++argv;
 	static constexpr int kStaticArgCount = 1;
 	static constexpr const char *kHelpString =
-	    "./VerboseTest [dataset] (-w=[width]) (-h=[height]) (-i=[model "
+	    "./PerformanceTest [dataset] (-w=[width]) (-h=[height]) (-i=[model "
 	    "iteration]) (-e=[entries per scene]) (-w: write result) (-s: single) (-nocu) (-novk)\n";
 	if (argc < kStaticArgCount) {
 		printf(kHelpString);
@@ -127,9 +127,20 @@ int main(int argc, char **argv) {
 		gsDataset.RandomCrop(randGen, entriesPerScene);
 	}
 
+	uint32_t gsDatasetMaxSplatCount = gsDataset.GetMaxSplatCount();
+	VkGSModel vkGsModel = VkGSModel::Create(pDevice, vkgsraster::Rasterizer::GetFwdArgsUsage().splatBuffers,
+	                                        gsDatasetMaxSplatCount, createVkCuBuffer);
+
 	vkgsraster::Rasterizer vkRasterizer{pDevice, {.forwardOutputImage = false}};
 	vkgsraster::Rasterizer::Resource vkRasterResource = {};
+	if (!noVk)
+		vkRasterResource.UpdateBuffer(pDevice, gsDatasetMaxSplatCount, 0.0);
 	vkgsraster::Rasterizer::PerfQuery vkRasterPerfQuery = vkgsraster::Rasterizer::PerfQuery::Create(pDevice);
+	vkgsraster::Rasterizer::BwdRWArgs vkRasterBwdRWArgs = {
+	    .dL_dSplats = VkGSModel::Create(pDevice, vkgsraster::Rasterizer::GetBwdArgsUsage().dL_dSplatBuffers,
+	                                    gsDatasetMaxSplatCount, createVkCuBuffer)
+	                      .GetSplatArgs(),
+	};
 
 	CuTileRasterizer::Resource cuTileRasterResource{};
 	CuTileRasterizer::FwdROArgs cuTileRasterFwdROArgs{};
@@ -143,18 +154,17 @@ int main(int argc, char **argv) {
 	double sumVkBackwardDraw = 0;
 
 	for (auto &scene : gsDataset.scenes) {
-		VkGSModel vkGsModel = VkGSModel::Create(pGenericQueue, vkgsraster::Rasterizer::GetFwdArgsUsage().splatBuffers,
-		                                        GSModel::Load(scene.modelFilename), createVkCuBuffer);
-
-		if (vkGsModel.IsEmpty()) {
-			printf("Invalid 3DGS Model %s\n", scene.modelFilename.c_str());
-			return EXIT_FAILURE;
+		{
+			auto gsModel = GSModel::Load(scene.modelFilename);
+			if (gsModel.IsEmpty()) {
+				printf("Invalid 3DGS Model %s\n", scene.modelFilename.c_str());
+				return EXIT_FAILURE;
+			}
+			vkGsModel.CopyFrom(pGenericQueue, gsModel);
 		}
 
 		printf("model: %s\nsplatCount = %d\n", scene.modelFilename.c_str(), vkGsModel.splatCount);
 
-		if (!noVk)
-			vkRasterResource.UpdateBuffer(pDevice, vkGsModel.splatCount, 0.0);
 		vkgsraster::Rasterizer::FwdROArgs vkRasterFwdROArgs = {
 		    .splatCount = vkGsModel.splatCount,
 		    .splats = vkGsModel.GetSplatArgs(),
@@ -163,11 +173,6 @@ int main(int argc, char **argv) {
 		vkgsraster::Rasterizer::FwdRWArgs vkRasterFwdRWArgs;
 		vkgsraster::Rasterizer::BwdROArgs vkRasterBwdROArgs = {
 		    .fwd = vkRasterFwdROArgs,
-		};
-		vkgsraster::Rasterizer::BwdRWArgs vkRasterBwdRWArgs = {
-		    .dL_dSplats = VkGSModel::Create(pDevice, vkgsraster::Rasterizer::GetBwdArgsUsage().dL_dSplatBuffers,
-		                                    vkGsModel.splatCount, createVkCuBuffer)
-		                      .GetSplatArgs(),
 		};
 
 		if (single)
