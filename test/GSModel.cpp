@@ -11,6 +11,28 @@
 #include <myvk/CommandBuffer.hpp>
 #include <ranges>
 
+uint32_t GSModel::LoadSplatCount(const std::filesystem::path &filename) {
+	std::ifstream fin{filename};
+	if (!fin.is_open())
+		return {};
+
+	{ // Parse Header
+		std::string line;
+		while (std::getline(fin, line)) {
+			auto view = line | std::views::split(' ') |
+			            std::views::transform([](auto rng) { return std::string_view(rng.data(), rng.size()); });
+			std::vector<std::string_view> words{view.begin(), view.end()};
+			if (words.empty())
+				return {};
+			if (words.size() >= 3 && words[0] == "element" && words[1] == "vertex")
+				return std::stoi(std::string{words[2]});
+			if (words[0] == "end_header")
+				break;
+		}
+	}
+	return 0;
+}
+
 GSModel GSModel::Load(const std::filesystem::path &filename) {
 	std::ifstream fin{filename};
 	if (!fin.is_open())
@@ -169,8 +191,7 @@ end_header
 #endif
 
 void VkGSModel::CopyFrom(const myvk::Ptr<myvk::Queue> &pQueue, const GSModel &model) {
-	if (model.splatCount != splatCount)
-		return;
+	splatCount = model.splatCount;
 
 	const auto &pDevice = pQueue->GetDevicePtr();
 	auto pCommandPool = myvk::CommandPool::Create(pQueue);

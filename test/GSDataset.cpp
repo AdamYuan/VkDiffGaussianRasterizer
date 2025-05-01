@@ -4,6 +4,8 @@
 
 #include "GSDataset.hpp"
 
+#include "GSModel.hpp"
+
 #include <fstream>
 #include <nlohmann/json.hpp>
 
@@ -54,6 +56,13 @@ GSDataset GSDataset::Load(const std::filesystem::path &filename, uint32_t modelI
 	}
 
 	return dataset;
+}
+
+uint32_t GSDataset::GetMaxSplatCount() const {
+	uint32_t splatCount = 0;
+	for (const auto &scene : scenes)
+		splatCount = std::max(splatCount, GSModel::LoadSplatCount(scene.modelFilename));
+	return splatCount;
 }
 
 void GSDataset::ResizeCamera(uint32_t width, uint32_t height) {
