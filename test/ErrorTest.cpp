@@ -24,31 +24,47 @@ void WriteDL_DSplatsJSON(const std::filesystem::path &filename, const CuTileRast
                          uint32_t splatCount);
 } // namespace cuperftest
 
-GSGradient::Error GSGradient::GetRRMSE(const GSGradient &r) const {
-	const auto getRRMSE = []<typename T>(const std::vector<T> &yHat, const std::vector<T> &y, uint32_t splatCount) {
-		static_assert(sizeof(T) % sizeof(float) == 0);
-		std::span yHatFlt{reinterpret_cast<const float *>(yHat.data()),
-		                  reinterpret_cast<const float *>(yHat.data() + splatCount)};
-		std::span yFlt{reinterpret_cast<const float *>(y.data()), //
-		               reinterpret_cast<const float *>(y.data() + splatCount)};
-		uint32_t count = 0;
-		double sum1 = 0, sum2 = 0;
-		for (uint32_t i = 0; i < yHatFlt.size(); ++i) {
-			auto d = double(yHatFlt[i] - yFlt[i]);
-			sum1 += d * d;
-			sum2 += double(yHatFlt[i] * yHatFlt[i]);
-			++count;
-		}
-		return std::sqrt(sum1 / double(count) / sum2);
-	};
+const auto RRMSE = [](std::span<const float> yHat, std::span<const float> y) {
+	uint32_t count = 0;
+	double sum1 = 0, sum2 = 0;
+	for (uint32_t i = 0; i < yHat.size(); ++i) {
+		// Only compute non-zero terms
+		if (std::abs(yHat[i]) < 1e-8f && std::abs(y[i]) < 1e-8f)
+			continue;
+		if (i < 10)
+			printf("%f, %f\n", yHat[i], y[i]);
+		auto d = double(yHat[i] - y[i]);
+		sum1 += d * d;
+		sum2 += double(yHat[i] * yHat[i]);
+		++count;
+	}
+	printf("\n\n");
+	return std::sqrt(sum1 / double(count) / sum2);
+};
 
-	Error rrmse{};
-	rrmse.mean = getRRMSE(means, r.means, splatCount);
-	rrmse.scale = getRRMSE(scales, r.scales, splatCount);
-	rrmse.rotate = getRRMSE(rotates, r.rotates, splatCount);
-	rrmse.opacity = getRRMSE(opacities, r.opacities, splatCount);
-	rrmse.sh0 = getRRMSE(sh0s, r.sh0s, splatCount);
-	return rrmse;
+struct MRE {
+	float yHatMin, yHatMax;
+	double operator()(std::span<const float> yHat, std::span<const float> y) const {
+		uint32_t count = 0;
+		double sum = 0;
+		for (uint32_t i = 0; i < yHat.size(); ++i) {
+			if (yHatMin < std::abs(yHat[i]) && std::abs(yHat[i]) < yHatMax) {
+				auto d = std::abs(double(yHat[i] - y[i]));
+				sum += d / std::abs(double(yHat[i]));
+				++count;
+			}
+		}
+		return sum / double(count);
+	}
+	std::string GetPrefix() const { return "MRE (" + std::to_string(yHatMin) + "~" + std::to_string(yHatMax) + ")"; }
+};
+
+void PrintError(const char *prefix, const GSGradient::Error &error) {
+	printf("%s mean: %.10lf\n", prefix, error.mean);
+	printf("%s scale: %.10lf\n", prefix, error.scale);
+	printf("%s rotate: %.10lf\n", prefix, error.rotate);
+	printf("%s opacity: %.10lf\n", prefix, error.opacity);
+	printf("%s sh0: %.10lf\n", prefix, error.sh0);
 }
 
 int main(int argc, char **argv) {
@@ -162,8 +178,15 @@ int main(int argc, char **argv) {
 	CuTileRasterizer::BwdRWArgs cuTileRasterBwdRWArgs{};
 	GSGradient cuTileRasterGradient{};
 
+	constexpr uint32_t kMRECount = 2;
+	std::array<MRE, kMRECount> mreFuncs = {
+	    MRE{1e-2f, 10.0f},
+	    MRE{10.0f, std::numeric_limits<float>::infinity()},
+	};
+
 	uint32_t sumCount = 0;
 	GSGradient::Error sumRRMSE = {};
+	std::array<GSGradient::Error, kMRECount> sumMREs{};
 
 	for (auto &scene : gsDataset.scenes) {
 		VkGSModel vkGsModel = VkGSModel::Create(pGenericQueue, vkgsraster::Rasterizer::GetFwdArgsUsage().splatBuffers,
@@ -252,25 +275,28 @@ int main(int argc, char **argv) {
 				cuTileRasterGradient.Update(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
 			}
 
-			GSGradient::Error rrmse = cuTileRasterGradient.GetRRMSE(vkRasterGradient);
+			GSGradient::Error rrmse = cuTileRasterGradient.GetError(vkRasterGradient, RRMSE);
+			std::array<GSGradient::Error, kMRECount> mres{};
+			for (uint32_t k = 0; k < kMRECount; ++k)
+				mres[k] = cuTileRasterGradient.GetError(vkRasterGradient, mreFuncs[k]);
 
-			printf("RRMSE mean: %lf\n", rrmse.mean);
-			printf("RRMSE scale: %lf\n", rrmse.scale);
-			printf("RRMSE rotate: %lf\n", rrmse.rotate);
-			printf("RRMSE opacity: %lf\n", rrmse.opacity);
-			printf("RRMSE sh0: %lf\n", rrmse.sh0);
+			PrintError("RRMSE", rrmse);
+			for (uint32_t k = 0; k < kMRECount; ++k)
+				PrintError((std::string("avg ") + mreFuncs[k].GetPrefix()).c_str(), mres[k]);
 
 			++sumCount;
 			sumRRMSE += rrmse;
+			for (uint32_t k = 0; k < kMRECount; ++k)
+				sumMREs[k] += mres[k];
 		}
 	}
 
 	sumRRMSE /= double(sumCount);
-	printf("avg RRMSE mean: %lf\n", sumRRMSE.mean);
-	printf("avg RRMSE scale: %lf\n", sumRRMSE.scale);
-	printf("avg RRMSE rotate: %lf\n", sumRRMSE.rotate);
-	printf("avg RRMSE opacity: %lf\n", sumRRMSE.opacity);
-	printf("avg RRMSE sh0: %lf\n", sumRRMSE.sh0);
+	for (uint32_t k = 0; k < kMRECount; ++k)
+		sumMREs[k] /= double(sumCount);
+	PrintError("avg RRMSE", sumRRMSE);
+	for (uint32_t k = 0; k < kMRECount; ++k)
+		PrintError((std::string("avg ") + mreFuncs[k].GetPrefix()).c_str(), sumMREs[k]);
 
 	return 0;
 }
