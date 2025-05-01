@@ -64,6 +64,13 @@ uint32_t GSDataset::GetMaxSplatCount() const {
 		splatCount = std::max(splatCount, GSModel::LoadSplatCount(scene.modelFilename));
 	return splatCount;
 }
+uint32_t GSDataset::GetMaxPixelCount() const {
+	uint32_t pixelCount = 0;
+	for (const auto &scene : scenes)
+		for (const auto &entry : scene.entries)
+			pixelCount = std::max(pixelCount, entry.camera.width * entry.camera.height);
+	return pixelCount;
+}
 
 void GSDataset::ResizeCamera(uint32_t width, uint32_t height) {
 	if (width == 0 && height == 0)
