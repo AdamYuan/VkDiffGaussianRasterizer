@@ -167,9 +167,19 @@ int main(int argc, char **argv) {
 		gsDataset.RandomCrop(randGen, entriesPerScene);
 	}
 
+	uint32_t gsDatasetMaxSplatCount = gsDataset.GetMaxSplatCount();
+	VkGSModel vkGsModel = VkGSModel::Create(pDevice, vkgsraster::Rasterizer::GetFwdArgsUsage().splatBuffers,
+	                                        gsDatasetMaxSplatCount, createVkCuBuffer);
+
 	vkgsraster::Rasterizer vkRasterizer{pDevice, {.forwardOutputImage = false}};
 	vkgsraster::Rasterizer::Resource vkRasterResource = {};
+	vkRasterResource.UpdateBuffer(pDevice, gsDatasetMaxSplatCount, 0.0);
 	GSGradient vkRasterGradient{};
+	vkgsraster::Rasterizer::BwdRWArgs vkRasterBwdRWArgs = {
+	    .dL_dSplats = VkGSModel::Create(pDevice, vkgsraster::Rasterizer::GetBwdArgsUsage().dL_dSplatBuffers,
+	                                    gsDatasetMaxSplatCount, createVkCuBuffer)
+	                      .GetSplatArgs(),
+	};
 
 	CuTileRasterizer::Resource cuTileRasterResource{};
 	CuTileRasterizer::FwdROArgs cuTileRasterFwdROArgs{};
@@ -189,17 +199,17 @@ int main(int argc, char **argv) {
 	std::array<GSGradient::Error, kMRECount> sumMREs{};
 
 	for (auto &scene : gsDataset.scenes) {
-		VkGSModel vkGsModel = VkGSModel::Create(pGenericQueue, vkgsraster::Rasterizer::GetFwdArgsUsage().splatBuffers,
-		                                        GSModel::Load(scene.modelFilename), createVkCuBuffer);
-
-		if (vkGsModel.IsEmpty()) {
-			printf("Invalid 3DGS Model %s\n", scene.modelFilename.c_str());
-			return EXIT_FAILURE;
+		{
+			auto gsModel = GSModel::Load(scene.modelFilename);
+			if (gsModel.IsEmpty()) {
+				printf("Invalid 3DGS Model %s\n", scene.modelFilename.c_str());
+				return EXIT_FAILURE;
+			}
+			vkGsModel.CopyFrom(pGenericQueue, gsModel);
 		}
 
 		printf("model: %s\nsplatCount = %d\n", scene.modelFilename.c_str(), vkGsModel.splatCount);
 
-		vkRasterResource.UpdateBuffer(pDevice, vkGsModel.splatCount, 0.0);
 		vkgsraster::Rasterizer::FwdROArgs vkRasterFwdROArgs = {
 		    .splatCount = vkGsModel.splatCount,
 		    .splats = vkGsModel.GetSplatArgs(),
@@ -208,11 +218,6 @@ int main(int argc, char **argv) {
 		vkgsraster::Rasterizer::FwdRWArgs vkRasterFwdRWArgs;
 		vkgsraster::Rasterizer::BwdROArgs vkRasterBwdROArgs = {
 		    .fwd = vkRasterFwdROArgs,
-		};
-		vkgsraster::Rasterizer::BwdRWArgs vkRasterBwdRWArgs = {
-		    .dL_dSplats = VkGSModel::Create(pDevice, vkgsraster::Rasterizer::GetBwdArgsUsage().dL_dSplatBuffers,
-		                                    vkGsModel.splatCount, createVkCuBuffer)
-		                      .GetSplatArgs(),
 		};
 
 		if (single)
