@@ -4,6 +4,9 @@
 #include "GSModel.hpp"
 #include "VkCuBuffer.hpp"
 
+#include "ErrorTest.hpp"
+
+#include <span>
 #include <myvk/ExternalMemoryUtil.hpp>
 #include <myvk/Instance.hpp>
 #include <myvk/Queue.hpp>
@@ -21,12 +24,42 @@ void WriteDL_DSplatsJSON(const std::filesystem::path &filename, const CuTileRast
                          uint32_t splatCount);
 } // namespace cuperftest
 
+GSGradient::Error GSGradient::GetMRE(const GSGradient &r) const {
+	const auto getMRE = []<typename T>(const std::vector<T> &yHat, const std::vector<T> &y, uint32_t splatCount) {
+		static_assert(sizeof(T) % sizeof(float) == 0);
+		std::span yHatFlt{reinterpret_cast<const float *>(yHat.data()),
+		                  reinterpret_cast<const float *>(yHat.data() + splatCount)};
+		std::span yFlt{reinterpret_cast<const float *>(y.data()), //
+		               reinterpret_cast<const float *>(y.data() + splatCount)};
+		uint32_t count = 0;
+		double sum = 0;
+		printf("%zu %zu\n", yHat.size(), yHatFlt.size());
+		for (uint32_t i = 0; i < yHatFlt.size(); ++i) {
+			if (yHatFlt[i] < 1e-2f)
+				continue;
+			if (i < 10/*double(std::abs((yHatFlt[i] - yFlt[i]) / yHatFlt[i])) > 1*/) {
+				printf("%f %f\n", yHatFlt[i], yFlt[i]);
+			}
+			sum += double(std::abs((yHatFlt[i] - yFlt[i]) / yHatFlt[i]));
+			++count;
+		}
+		return sum / double(count);
+	};
+
+	Error mre{};
+	mre.mean = getMRE(means, r.means, splatCount);
+	mre.scale = getMRE(scales, r.scales, splatCount);
+	mre.rotate = getMRE(rotates, r.rotates, splatCount);
+	mre.opacity = getMRE(opacities, r.opacities, splatCount);
+	mre.sh0 = getMRE(sh0s, r.sh0s, splatCount);
+	return mre;
+}
+
 int main(int argc, char **argv) {
 	--argc, ++argv;
 	static constexpr int kStaticArgCount = 1;
-	static constexpr const char *kHelpString =
-	    "./ErrorTest [dataset] (-w=[width]) (-h=[height]) (-i=[model "
-	    "iteration]) (-e=[entries per scene]) (-w: write result) (-s: single) (-nocu) (-novk)\n";
+	static constexpr const char *kHelpString = "./ErrorTest [dataset] (-w=[width]) (-h=[height]) (-i=[model "
+	                                           "iteration]) (-e=[entries per scene]) (-w: write result) (-s: single)\n";
 	if (argc < kStaticArgCount) {
 		printf(kHelpString);
 		return EXIT_FAILURE;
@@ -37,7 +70,6 @@ int main(int argc, char **argv) {
 	uint32_t entriesPerScene = 0;
 	bool writeResult = false;
 	bool single = false;
-	bool noCu = false, noVk = false;
 	for (int i = kStaticArgCount; i < argc; ++i) {
 		auto arg = std::string{argv[i]};
 		std::string val;
@@ -55,10 +87,6 @@ int main(int argc, char **argv) {
 			writeResult = true;
 		else if (arg == "-s")
 			single = true;
-		else if (arg == "-nocu")
-			noCu = true;
-		else if (arg == "-novk")
-			noVk = true;
 		else if (getValue(arg, "-w=", val))
 			resizeWidth = std::stoul(val);
 		else if (getValue(arg, "-h=", val))
@@ -129,18 +157,17 @@ int main(int argc, char **argv) {
 
 	vkgsraster::Rasterizer vkRasterizer{pDevice, {.forwardOutputImage = false}};
 	vkgsraster::Rasterizer::Resource vkRasterResource = {};
-	vkgsraster::Rasterizer::PerfQuery vkRasterPerfQuery = vkgsraster::Rasterizer::PerfQuery::Create(pDevice);
+	GSGradient vkRasterGradient{};
 
 	CuTileRasterizer::Resource cuTileRasterResource{};
 	CuTileRasterizer::FwdROArgs cuTileRasterFwdROArgs{};
 	CuTileRasterizer::FwdRWArgs cuTileRasterFwdRWArgs{};
 	CuTileRasterizer::BwdROArgs cuTileRasterBwdROArgs{};
 	CuTileRasterizer::BwdRWArgs cuTileRasterBwdRWArgs{};
-	auto cuTileRasterPerfQuery = CuTileRasterizer::PerfQuery::Create();
+	GSGradient cuTileRasterGradient{};
 
 	uint32_t sumCount = 0;
-	double sumCuForward = 0, sumVkForward = 0, sumCuBackward = 0, sumVkBackward = 0;
-	double sumVkBackwardDraw = 0;
+	GSGradient::Error sumMRE = {};
 
 	for (auto &scene : gsDataset.scenes) {
 		VkGSModel vkGsModel = VkGSModel::Create(pGenericQueue, vkgsraster::Rasterizer::GetFwdArgsUsage().splatBuffers,
@@ -153,8 +180,7 @@ int main(int argc, char **argv) {
 
 		printf("model: %s\nsplatCount = %d\n", scene.modelFilename.c_str(), vkGsModel.splatCount);
 
-		if (!noVk)
-			vkRasterResource.UpdateBuffer(pDevice, vkGsModel.splatCount, 0.0);
+		vkRasterResource.UpdateBuffer(pDevice, vkGsModel.splatCount, 0.0);
 		vkgsraster::Rasterizer::FwdROArgs vkRasterFwdROArgs = {
 		    .splatCount = vkGsModel.splatCount,
 		    .splats = vkGsModel.GetSplatArgs(),
@@ -201,8 +227,7 @@ int main(int argc, char **argv) {
 			float *cuOutPixels = cuTileRasterFwdRWArgs.outPixels;
 
 			// Vulkan
-			vkgsraster::Rasterizer::PerfMetrics vkRasterPerfMetrics{};
-			if (!noVk) {
+			{
 				vkRasterResource.UpdateImage(pDevice, entry.camera.width, entry.camera.height, vkRasterizer);
 				const auto runVkCommand = [&](auto &&cmdRun) {
 					pCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
@@ -216,85 +241,40 @@ int main(int argc, char **argv) {
 				runVkCommand([&] {
 					vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource);
 				});
+				cuperftest::ClearDL_DSplats(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
 				runVkCommand([&] {
 					vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource);
 				});
-				runVkCommand([&] {
-					vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource,
-					                        vkRasterPerfQuery);
-				});
-				cuperftest::ClearDL_DSplats(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
-				runVkCommand([&] {
-					vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource,
-					                         vkRasterPerfQuery);
-				});
-
-				if (writeResult) {
-					cuperftest::WritePixelsPNG(entry.imageName + "_vk.png", cuOutPixels, entry.camera.width,
-					                           entry.camera.height);
-					cuperftest::WriteDL_DSplatsJSON(entry.imageName + "_vk.json", cuTileRasterBwdRWArgs.dL_dSplats,
-					                                std::min(vkGsModel.splatCount, kMaxWriteSplatCount));
-				}
-				vkRasterPerfMetrics = vkRasterPerfQuery.GetMetrics();
-				printf("vk_forward: %lf ms\n", vkRasterPerfMetrics.forward);
-				printf("vk_backward: %lf ms\n", vkRasterPerfMetrics.backward);
-				printf("vk_backward draw: %lf ms\n", vkRasterPerfMetrics.backwardDraw);
-				printf("vk: %lf ms\n", vkRasterPerfMetrics.forward + vkRasterPerfMetrics.backward);
+				vkRasterGradient.Update(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
 			}
 
 			// Cuda
-			CuTileRasterizer::PerfMetrics cuTileRasterPerfMetrics{};
-			if (!noCu) {
+			{
 				CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource);
-				CuTileRasterizer::Backward(cuTileRasterBwdROArgs, cuTileRasterBwdRWArgs, cuTileRasterResource);
-
-				CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource,
-				                          cuTileRasterPerfQuery);
 				cuperftest::ClearDL_DSplats(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
-				CuTileRasterizer::Backward(cuTileRasterBwdROArgs, cuTileRasterBwdRWArgs, cuTileRasterResource,
-				                           cuTileRasterPerfQuery);
-				if (writeResult) {
-					cuperftest::WritePixelsPNG(entry.imageName + "_cu.png", cuOutPixels, entry.camera.width,
-					                           entry.camera.height);
-					cuperftest::WriteDL_DSplatsJSON(entry.imageName + "_cu.json", cuTileRasterBwdRWArgs.dL_dSplats,
-					                                std::min(vkGsModel.splatCount, kMaxWriteSplatCount));
-				}
-				cuTileRasterPerfMetrics = cuTileRasterPerfQuery.GetMetrics();
-				printf("cu_forward: %lf ms (numRendered = %d)\n", cuTileRasterPerfMetrics.forward,
-				       cuTileRasterResource.numRendered);
-				printf("cu_backward: %lf ms\n", cuTileRasterPerfMetrics.backward);
-				printf("cu: %lf ms\n", cuTileRasterPerfMetrics.forward + cuTileRasterPerfMetrics.backward);
+				CuTileRasterizer::Backward(cuTileRasterBwdROArgs, cuTileRasterBwdRWArgs, cuTileRasterResource);
+				cuTileRasterGradient.Update(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
 			}
 
-			if (!noCu && !noVk) {
-				// Speed Up
-				printf("speedup_forward: %lf\n", cuTileRasterPerfMetrics.forward / vkRasterPerfMetrics.forward);
-				printf("speedup_backward: %lf\n", cuTileRasterPerfMetrics.backward / vkRasterPerfMetrics.backward);
-				printf("speedup: %lf\n", (cuTileRasterPerfMetrics.forward + cuTileRasterPerfMetrics.backward) /
-				                             (vkRasterPerfMetrics.forward + vkRasterPerfMetrics.backward));
-			}
+			GSGradient::Error mre = cuTileRasterGradient.GetMRE(vkRasterGradient);
+
+			printf("MRE mean: %lf\n", mre.mean);
+			printf("MRE scale: %lf\n", mre.scale);
+			printf("MRE rotate: %lf\n", mre.rotate);
+			printf("MRE opacity: %lf\n", mre.opacity);
+			printf("MRE sh0: %lf\n", mre.sh0);
 
 			++sumCount;
-			sumCuForward += cuTileRasterPerfMetrics.forward;
-			sumCuBackward += cuTileRasterPerfMetrics.backward;
-			sumVkForward += vkRasterPerfMetrics.forward;
-			sumVkBackward += vkRasterPerfMetrics.backward;
-			sumVkBackwardDraw += vkRasterPerfMetrics.backwardDraw;
+			sumMRE += mre;
 		}
 	}
 
-	printf("avg vk_forward: %lf ms\n", sumVkForward / double(sumCount));
-	printf("avg vk_backward: %lf ms\n", sumVkBackward / double(sumCount));
-	printf("avg vk_backward draw: %lf ms\n", sumVkBackwardDraw / double(sumCount));
-	printf("avg vk: %lf ms\n", (sumVkForward + sumVkBackward) / double(sumCount));
-
-	printf("avg cu_forward: %lf ms\n", sumCuForward / double(sumCount));
-	printf("avg cu_backward: %lf ms\n", sumCuBackward / double(sumCount));
-	printf("avg cu: %lf ms\n", (sumCuForward + sumCuBackward) / double(sumCount));
-
-	printf("speedup_forward: %lf\n", sumCuForward / sumVkForward);
-	printf("speedup_backward: %lf\n", sumCuBackward / sumVkBackward);
-	printf("speedup: %lf\n", (sumCuForward + sumCuBackward) / (sumVkForward + sumVkBackward));
+	sumMRE /= double(sumCount);
+	printf("avg MRE mean: %lf\n", sumMRE.mean);
+	printf("avg MRE scale: %lf\n", sumMRE.scale);
+	printf("avg MRE rotate: %lf\n", sumMRE.rotate);
+	printf("avg MRE opacity: %lf\n", sumMRE.opacity);
+	printf("avg MRE sh0: %lf\n", sumMRE.sh0);
 
 	return 0;
 }

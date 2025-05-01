@@ -1,4 +1,5 @@
 #include "CuTileRasterizer.hpp"
+#include "ErrorTest.hpp"
 #include "GSModel.hpp"
 
 #include <array>
@@ -82,3 +83,26 @@ void WriteDL_DSplatsJSON(const std::filesystem::path &filename, const CuTileRast
 	fout << json.dump(4, ' ') << std::endl;
 }
 } // namespace cuperftest
+
+void GSGradient::Update(const CuTileRasterizer::SplatArgs &splats, uint32_t splatCount) {
+	if (this->splatCount != splatCount) {
+		this->splatCount = splatCount;
+
+		means.resize(splatCount);
+		scales.resize(splatCount);
+		rotates.resize(splatCount);
+		opacities.resize(splatCount);
+		sh0s.resize(splatCount);
+	}
+
+	static std::vector<GSModel::SH> shs;
+	shs.resize(splatCount);
+
+	cudaMemcpy(means.data(), splats.means, splatCount * sizeof(Mean), cudaMemcpyDeviceToHost);
+	cudaMemcpy(scales.data(), splats.scales, splatCount * sizeof(Scale), cudaMemcpyDeviceToHost);
+	cudaMemcpy(opacities.data(), splats.opacities, splatCount * sizeof(Opacity), cudaMemcpyDeviceToHost);
+	cudaMemcpy(rotates.data(), splats.rotates, splatCount * sizeof(Rotate), cudaMemcpyDeviceToHost);
+	cudaMemcpy(shs.data(), splats.shs, splatCount * sizeof(GSModel::SH), cudaMemcpyDeviceToHost);
+	for (uint32_t i = 0; i < splatCount; ++i)
+		sh0s[i] = shs[i][0];
+}
