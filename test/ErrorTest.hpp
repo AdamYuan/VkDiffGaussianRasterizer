@@ -45,8 +45,7 @@ struct GSGradient {
 	std::vector<SH0> sh0s;
 
 	void Update(const CuTileRasterizer::SplatArgs &splats, uint32_t splatCount);
-	// Mean Relative Error
-	Error GetMRE(const GSGradient &r) const;
+	Error GetRRMSE(const GSGradient &r) const;
 };
 
 #endif

@@ -6,12 +6,12 @@
 
 #include "ErrorTest.hpp"
 
-#include <span>
 #include <myvk/ExternalMemoryUtil.hpp>
 #include <myvk/Instance.hpp>
 #include <myvk/Queue.hpp>
 #include <myvk/QueueSelector.hpp>
 #include <random>
+#include <span>
 
 static constexpr uint32_t kMaxWriteSplatCount = 128;
 static constexpr uint32_t kDefaultModelIteration = 7000;
@@ -24,35 +24,31 @@ void WriteDL_DSplatsJSON(const std::filesystem::path &filename, const CuTileRast
                          uint32_t splatCount);
 } // namespace cuperftest
 
-GSGradient::Error GSGradient::GetMRE(const GSGradient &r) const {
-	const auto getMRE = []<typename T>(const std::vector<T> &yHat, const std::vector<T> &y, uint32_t splatCount) {
+GSGradient::Error GSGradient::GetRRMSE(const GSGradient &r) const {
+	const auto getRRMSE = []<typename T>(const std::vector<T> &yHat, const std::vector<T> &y, uint32_t splatCount) {
 		static_assert(sizeof(T) % sizeof(float) == 0);
 		std::span yHatFlt{reinterpret_cast<const float *>(yHat.data()),
 		                  reinterpret_cast<const float *>(yHat.data() + splatCount)};
 		std::span yFlt{reinterpret_cast<const float *>(y.data()), //
 		               reinterpret_cast<const float *>(y.data() + splatCount)};
 		uint32_t count = 0;
-		double sum = 0;
-		printf("%zu %zu\n", yHat.size(), yHatFlt.size());
+		double sum1 = 0, sum2 = 0;
 		for (uint32_t i = 0; i < yHatFlt.size(); ++i) {
-			if (yHatFlt[i] < 1e-2f)
-				continue;
-			if (i < 10/*double(std::abs((yHatFlt[i] - yFlt[i]) / yHatFlt[i])) > 1*/) {
-				printf("%f %f\n", yHatFlt[i], yFlt[i]);
-			}
-			sum += double(std::abs((yHatFlt[i] - yFlt[i]) / yHatFlt[i]));
+			auto d = double(yHatFlt[i] - yFlt[i]);
+			sum1 += d * d;
+			sum2 += double(yHatFlt[i] * yHatFlt[i]);
 			++count;
 		}
-		return sum / double(count);
+		return std::sqrt(sum1 / double(count) / sum2);
 	};
 
-	Error mre{};
-	mre.mean = getMRE(means, r.means, splatCount);
-	mre.scale = getMRE(scales, r.scales, splatCount);
-	mre.rotate = getMRE(rotates, r.rotates, splatCount);
-	mre.opacity = getMRE(opacities, r.opacities, splatCount);
-	mre.sh0 = getMRE(sh0s, r.sh0s, splatCount);
-	return mre;
+	Error rrmse{};
+	rrmse.mean = getRRMSE(means, r.means, splatCount);
+	rrmse.scale = getRRMSE(scales, r.scales, splatCount);
+	rrmse.rotate = getRRMSE(rotates, r.rotates, splatCount);
+	rrmse.opacity = getRRMSE(opacities, r.opacities, splatCount);
+	rrmse.sh0 = getRRMSE(sh0s, r.sh0s, splatCount);
+	return rrmse;
 }
 
 int main(int argc, char **argv) {
@@ -167,7 +163,7 @@ int main(int argc, char **argv) {
 	GSGradient cuTileRasterGradient{};
 
 	uint32_t sumCount = 0;
-	GSGradient::Error sumMRE = {};
+	GSGradient::Error sumRRMSE = {};
 
 	for (auto &scene : gsDataset.scenes) {
 		VkGSModel vkGsModel = VkGSModel::Create(pGenericQueue, vkgsraster::Rasterizer::GetFwdArgsUsage().splatBuffers,
@@ -256,25 +252,25 @@ int main(int argc, char **argv) {
 				cuTileRasterGradient.Update(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
 			}
 
-			GSGradient::Error mre = cuTileRasterGradient.GetMRE(vkRasterGradient);
+			GSGradient::Error rrmse = cuTileRasterGradient.GetRRMSE(vkRasterGradient);
 
-			printf("MRE mean: %lf\n", mre.mean);
-			printf("MRE scale: %lf\n", mre.scale);
-			printf("MRE rotate: %lf\n", mre.rotate);
-			printf("MRE opacity: %lf\n", mre.opacity);
-			printf("MRE sh0: %lf\n", mre.sh0);
+			printf("RRMSE mean: %lf\n", rrmse.mean);
+			printf("RRMSE scale: %lf\n", rrmse.scale);
+			printf("RRMSE rotate: %lf\n", rrmse.rotate);
+			printf("RRMSE opacity: %lf\n", rrmse.opacity);
+			printf("RRMSE sh0: %lf\n", rrmse.sh0);
 
 			++sumCount;
-			sumMRE += mre;
+			sumRRMSE += rrmse;
 		}
 	}
 
-	sumMRE /= double(sumCount);
-	printf("avg MRE mean: %lf\n", sumMRE.mean);
-	printf("avg MRE scale: %lf\n", sumMRE.scale);
-	printf("avg MRE rotate: %lf\n", sumMRE.rotate);
-	printf("avg MRE opacity: %lf\n", sumMRE.opacity);
-	printf("avg MRE sh0: %lf\n", sumMRE.sh0);
+	sumRRMSE /= double(sumCount);
+	printf("avg RRMSE mean: %lf\n", sumRRMSE.mean);
+	printf("avg RRMSE scale: %lf\n", sumRRMSE.scale);
+	printf("avg RRMSE rotate: %lf\n", sumRRMSE.rotate);
+	printf("avg RRMSE opacity: %lf\n", sumRRMSE.opacity);
+	printf("avg RRMSE sh0: %lf\n", sumRRMSE.sh0);
 
 	return 0;
 }
