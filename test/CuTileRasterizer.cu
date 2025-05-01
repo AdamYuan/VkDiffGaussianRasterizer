@@ -29,30 +29,6 @@ char *CuTileRasterizer::Resource::ResizeableBuffer::Update(std::size_t updateSiz
 	return data;
 }
 
-CuTileRasterizer::PerfQuery CuTileRasterizer::PerfQuery::Create() {
-	PerfQuery query{};
-	for (uint32_t i = 0; i < kEventCount; ++i) {
-		cudaEvent_t event;
-		cudaEventCreate(&event);
-		query.events[i] = (uintptr_t)event;
-	}
-	return query;
-}
-void CuTileRasterizer::PerfQuery::Record(Event event) const {
-	if (events[event])
-		cudaEventRecord((cudaEvent_t)events[event]);
-}
-CuTileRasterizer::PerfMetrics CuTileRasterizer::PerfQuery::GetMetrics() const {
-	for (uint32_t i = 0; i < kEventCount; ++i)
-		cudaEventSynchronize((cudaEvent_t)events[i]);
-
-	PerfMetrics metrics{};
-	cudaEventElapsedTime(&metrics.forward, (cudaEvent_t)events[kForwardStart], (cudaEvent_t)events[kForwardEnd]);
-	cudaEventElapsedTime(&metrics.backward, (cudaEvent_t)events[kBackwardStart], (cudaEvent_t)events[kBackwardEnd]);
-
-	return metrics;
-}
-
 void CuTileRasterizer::CameraArgs::Update(const vkgsraster::Rasterizer::CameraArgs &vkCamera) {
 	width = (int)vkCamera.width;
 	height = (int)vkCamera.height;
@@ -177,7 +153,6 @@ void CuTileRasterizer::Forward(const FwdROArgs &roArgs, const FwdRWArgs &rwArgs,
                                const PerfQuery &perfQuery) {
 
 	cudaDeviceSynchronize();
-	perfQuery.Record(PerfQuery::Event::kForwardStart);
 
 	resource.numRendered = CudaRasterizer::Rasterizer::forward(
 	    [&](std::size_t size) { return resource.geometryBuffer.Update(size); },
@@ -186,9 +161,8 @@ void CuTileRasterizer::Forward(const FwdROArgs &roArgs, const FwdRWArgs &rwArgs,
 	    GSModel::kSHSize, roArgs.bgColor, roArgs.camera.width, roArgs.camera.height, roArgs.splats.means,
 	    roArgs.splats.shs, nullptr, roArgs.splats.opacities, roArgs.splats.scales, 1.0f, roArgs.splats.rotates, nullptr,
 	    roArgs.camera.viewMat, roArgs.camera.projMat, roArgs.camera.pos, roArgs.camera.tanFovX, roArgs.camera.tanFovY,
-	    false, rwArgs.outPixels);
+	    false, rwArgs.outPixels, nullptr, false, perfQuery);
 
-	perfQuery.Record(PerfQuery::Event::kForwardEnd);
 	cudaDeviceSynchronize();
 }
 
@@ -208,7 +182,6 @@ void CuTileRasterizer::Backward(const BwdROArgs &roArgs, const BwdRWArgs &rwArgs
 	auto dL = reinterpret_cast<float *>(resource.dLBuffer.Update(dL_count * sizeof(float)));
 
 	cudaDeviceSynchronize();
-	perfQuery.Record(PerfQuery::Event::kBackwardStart);
 
 	cudaMemset(dL, 0, dL_count * sizeof(float));
 
@@ -224,8 +197,7 @@ void CuTileRasterizer::Backward(const BwdROArgs &roArgs, const BwdRWArgs &rwArgs
 	    roArgs.fwd.camera.projMat, roArgs.fwd.camera.pos, roArgs.fwd.camera.tanFovX, roArgs.fwd.camera.tanFovY, nullptr,
 	    resource.geometryBuffer.data, resource.binningBuffer.data, resource.imageBuffer.data, roArgs.dL_dPixels,
 	    dL_dmean2Ds, dL_dconics, rwArgs.dL_dSplats.opacities, dL_dcolors, rwArgs.dL_dSplats.means, dL_dcov3D,
-	    rwArgs.dL_dSplats.shs, rwArgs.dL_dSplats.scales, rwArgs.dL_dSplats.rotates, false);
+	    rwArgs.dL_dSplats.shs, rwArgs.dL_dSplats.scales, rwArgs.dL_dSplats.rotates, false, perfQuery);
 
-	perfQuery.Record(PerfQuery::Event::kBackwardEnd);
 	cudaDeviceSynchronize();
 }

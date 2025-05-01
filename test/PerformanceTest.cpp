@@ -151,11 +151,11 @@ int main(int argc, char **argv) {
 	vkgsraster::Rasterizer::BwdROArgs vkRasterBwdROArgs = {};
 	printf("gsDatasetMaxPixelCount: %d\n", gsDatasetMaxPixelCount);
 	vkRasterFwdRWArgs.pOutPixelBuffer = VkCuBuffer::Create(pDevice, gsDatasetMaxPixelCount * 3 * sizeof(float),
-														   vkgsraster::Rasterizer::GetFwdArgsUsage().outPixelBuffer,
-														   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	                                                       vkgsraster::Rasterizer::GetFwdArgsUsage().outPixelBuffer,
+	                                                       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	auto pdL_dPixelBuffer = VkCuBuffer::Create(pDevice, gsDatasetMaxPixelCount * 3 * sizeof(float),
-											   vkgsraster::Rasterizer::GetBwdArgsUsage().dL_dPixelBuffer,
-											   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	                                           vkgsraster::Rasterizer::GetBwdArgsUsage().dL_dPixelBuffer,
+	                                           VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	vkRasterBwdROArgs.pdL_dPixelBuffer = pdL_dPixelBuffer;
 	cuperftest::RandomPixels(pdL_dPixelBuffer->GetCudaMappedPtr<float>(), gsDatasetMaxPixelCount, 1);
 	if (!noVk) {
@@ -177,7 +177,7 @@ int main(int argc, char **argv) {
 
 	uint32_t sumCount = 0;
 	double sumCuForward = 0, sumVkForward = 0, sumCuBackward = 0, sumVkBackward = 0;
-	double sumVkForwardDraw = 0, sumVkBackwardDraw = 0;
+	double sumCuForwardDraw = 0, sumVkForwardDraw = 0, sumCuBackwardDraw = 0, sumVkBackwardDraw = 0;
 
 	for (auto &scene : gsDataset.scenes) {
 		{
@@ -248,6 +248,7 @@ int main(int argc, char **argv) {
 				printf("vk_backward: %lf ms\n", vkRasterPerfMetrics.backward);
 				printf("vk_backward draw: %lf ms\n", vkRasterPerfMetrics.backwardDraw);
 				printf("vk: %lf ms\n", vkRasterPerfMetrics.forward + vkRasterPerfMetrics.backward);
+				printf("vk draw: %lf ms\n", vkRasterPerfMetrics.forwardDraw + vkRasterPerfMetrics.backwardDraw);
 			}
 
 			// Cuda
@@ -270,21 +271,33 @@ int main(int argc, char **argv) {
 				cuTileRasterPerfMetrics = cuTileRasterPerfQuery.GetMetrics();
 				printf("cu_forward: %lf ms (numRendered = %d)\n", cuTileRasterPerfMetrics.forward,
 				       cuTileRasterResource.numRendered);
+				printf("cu_forward draw: %lf ms\n", cuTileRasterPerfMetrics.forwardDraw);
 				printf("cu_backward: %lf ms\n", cuTileRasterPerfMetrics.backward);
+				printf("cu_backward draw: %lf ms\n", cuTileRasterPerfMetrics.backwardDraw);
 				printf("cu: %lf ms\n", cuTileRasterPerfMetrics.forward + cuTileRasterPerfMetrics.backward);
+				printf("cu draw: %lf ms\n", cuTileRasterPerfMetrics.forwardDraw + cuTileRasterPerfMetrics.backwardDraw);
 			}
 
 			if (!noCu && !noVk) {
 				// Speed Up
 				printf("speedup_forward: %lf\n", cuTileRasterPerfMetrics.forward / vkRasterPerfMetrics.forward);
 				printf("speedup_backward: %lf\n", cuTileRasterPerfMetrics.backward / vkRasterPerfMetrics.backward);
+				printf("speedup_forward draw: %lf\n",
+				       cuTileRasterPerfMetrics.forwardDraw / vkRasterPerfMetrics.forwardDraw);
+				printf("speedup_backward draw: %lf\n",
+				       cuTileRasterPerfMetrics.backwardDraw / vkRasterPerfMetrics.backwardDraw);
 				printf("speedup: %lf\n", (cuTileRasterPerfMetrics.forward + cuTileRasterPerfMetrics.backward) /
 				                             (vkRasterPerfMetrics.forward + vkRasterPerfMetrics.backward));
+				printf("speedup draw: %lf\n",
+				       (cuTileRasterPerfMetrics.forwardDraw + cuTileRasterPerfMetrics.backwardDraw) /
+				           (vkRasterPerfMetrics.forwardDraw + vkRasterPerfMetrics.backwardDraw));
 			}
 
 			++sumCount;
 			sumCuForward += cuTileRasterPerfMetrics.forward;
+			sumCuForwardDraw += cuTileRasterPerfMetrics.forwardDraw;
 			sumCuBackward += cuTileRasterPerfMetrics.backward;
+			sumCuBackwardDraw += cuTileRasterPerfMetrics.backwardDraw;
 			sumVkForward += vkRasterPerfMetrics.forward;
 			sumVkForwardDraw += vkRasterPerfMetrics.forwardDraw;
 			sumVkBackward += vkRasterPerfMetrics.backward;
@@ -297,14 +310,21 @@ int main(int argc, char **argv) {
 	printf("avg vk_backward: %lf ms\n", sumVkBackward / double(sumCount));
 	printf("avg vk_backward draw: %lf ms\n", sumVkBackwardDraw / double(sumCount));
 	printf("avg vk: %lf ms\n", (sumVkForward + sumVkBackward) / double(sumCount));
+	printf("avg vk draw: %lf ms\n", (sumVkForwardDraw + sumVkBackwardDraw) / double(sumCount));
 
 	printf("avg cu_forward: %lf ms\n", sumCuForward / double(sumCount));
+	printf("avg cu_forward draw: %lf ms\n", sumCuForwardDraw / double(sumCount));
 	printf("avg cu_backward: %lf ms\n", sumCuBackward / double(sumCount));
+	printf("avg cu_backward draw: %lf ms\n", sumCuBackwardDraw / double(sumCount));
 	printf("avg cu: %lf ms\n", (sumCuForward + sumCuBackward) / double(sumCount));
+	printf("avg cu draw: %lf ms\n", (sumCuForwardDraw + sumCuBackwardDraw) / double(sumCount));
 
-	printf("speedup_forward: %lf\n", sumCuForward / sumVkForward);
-	printf("speedup_backward: %lf\n", sumCuBackward / sumVkBackward);
-	printf("speedup: %lf\n", (sumCuForward + sumCuBackward) / (sumVkForward + sumVkBackward));
+	printf("avg speedup_forward: %lf\n", sumCuForward / sumVkForward);
+	printf("avg speedup_forward draw: %lf\n", sumCuForwardDraw / sumVkForwardDraw);
+	printf("avg speedup_backward: %lf\n", sumCuBackward / sumVkBackward);
+	printf("avg speedup_backward draw: %lf\n", sumCuBackwardDraw / sumVkBackwardDraw);
+	printf("avg speedup: %lf\n", (sumCuForward + sumCuBackward) / (sumVkForward + sumVkBackward));
+	printf("avg speedup draw: %lf\n", (sumCuForwardDraw + sumCuBackwardDraw) / (sumVkForwardDraw + sumVkBackwardDraw));
 
 	return 0;
 }

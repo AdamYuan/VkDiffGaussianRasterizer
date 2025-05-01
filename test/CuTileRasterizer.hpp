@@ -7,6 +7,7 @@
 #define CUTILERASTERIZER_HPP
 
 #include "../src/Rasterizer.hpp"
+#include <rasterizer.h>
 #include <array>
 
 struct CuTileRasterizer {
@@ -22,18 +23,8 @@ struct CuTileRasterizer {
 		int numRendered{};
 	};
 
-	struct PerfMetrics {
-		float forward, backward;
-	};
-
-	struct PerfQuery {
-		enum Event : uint32_t { kForwardStart, kForwardEnd, kBackwardStart, kBackwardEnd, kEventCount };
-		std::array<uintptr_t, kEventCount> events;
-
-		static PerfQuery Create();
-		void Record(Event event) const;
-		PerfMetrics GetMetrics() const;
-	};
+	using PerfQuery = CudaRasterizer::Rasterizer::PerfQuery;
+	using PerfMetrics = CudaRasterizer::Rasterizer::PerfMetrics;
 
 	struct SplatArgs {
 		float *means{};
