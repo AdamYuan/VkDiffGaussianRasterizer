@@ -166,8 +166,11 @@ int main(int argc, char **argv) {
 		std::mt19937 randGen{};
 		gsDataset.RandomCrop(randGen, entriesPerScene);
 	}
+	if (single)
+		gsDataset.SingleCrop();
 
 	uint32_t gsDatasetMaxSplatCount = gsDataset.GetMaxSplatCount();
+	uint32_t gsDatasetMaxPixelCount = gsDataset.GetMaxPixelCount();
 	VkGSModel vkGsModel = VkGSModel::Create(pDevice, vkgsraster::Rasterizer::GetFwdArgsUsage().splatBuffers,
 	                                        gsDatasetMaxSplatCount, createVkCuBuffer);
 
@@ -175,6 +178,19 @@ int main(int argc, char **argv) {
 	vkgsraster::Rasterizer::Resource vkRasterResource = {};
 	vkRasterResource.UpdateBuffer(pDevice, gsDatasetMaxSplatCount, 0.0);
 	GSGradient vkRasterGradient{};
+	vkgsraster::Rasterizer::FwdROArgs vkRasterFwdROArgs = {};
+	vkgsraster::Rasterizer::FwdRWArgs vkRasterFwdRWArgs = {};
+	vkgsraster::Rasterizer::BwdROArgs vkRasterBwdROArgs = {};
+	printf("gsDatasetMaxPixelCount: %d\n", gsDatasetMaxPixelCount);
+	vkRasterFwdRWArgs.pOutPixelBuffer = VkCuBuffer::Create(pDevice, gsDatasetMaxPixelCount * 3 * sizeof(float),
+														   vkgsraster::Rasterizer::GetFwdArgsUsage().outPixelBuffer,
+														   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	auto pdL_dPixelBuffer = VkCuBuffer::Create(pDevice, gsDatasetMaxPixelCount * 3 * sizeof(float),
+											   vkgsraster::Rasterizer::GetBwdArgsUsage().dL_dPixelBuffer,
+											   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	vkRasterBwdROArgs.pdL_dPixelBuffer = pdL_dPixelBuffer;
+	cuperftest::RandomPixels(pdL_dPixelBuffer->GetCudaMappedPtr<float>(), gsDatasetMaxPixelCount, 1);
+	vkgsraster::Rasterizer::PerfQuery vkRasterPerfQuery = vkgsraster::Rasterizer::PerfQuery::Create(pDevice);
 	vkgsraster::Rasterizer::BwdRWArgs vkRasterBwdRWArgs = {
 	    .dL_dSplats = VkGSModel::Create(pDevice, vkgsraster::Rasterizer::GetBwdArgsUsage().dL_dSplatBuffers,
 	                                    gsDatasetMaxSplatCount, createVkCuBuffer)
@@ -210,39 +226,15 @@ int main(int argc, char **argv) {
 
 		printf("model: %s\nsplatCount = %d\n", scene.modelFilename.c_str(), vkGsModel.splatCount);
 
-		vkgsraster::Rasterizer::FwdROArgs vkRasterFwdROArgs = {
-		    .splatCount = vkGsModel.splatCount,
-		    .splats = vkGsModel.GetSplatArgs(),
-		    .bgColor = {1.0f, 1.0f, 1.0f},
-		};
-		vkgsraster::Rasterizer::FwdRWArgs vkRasterFwdRWArgs;
-		vkgsraster::Rasterizer::BwdROArgs vkRasterBwdROArgs = {
-		    .fwd = vkRasterFwdROArgs,
-		};
-
-		if (single)
-			scene.entries = {scene.entries[0]};
+		vkRasterFwdROArgs.splatCount = vkGsModel.splatCount;
+		vkRasterFwdROArgs.splats = vkGsModel.GetSplatArgs();
+		vkRasterFwdROArgs.bgColor = {1.0f, 1.0f, 1.0f};
+		vkRasterBwdROArgs.fwd = vkRasterFwdROArgs;
 
 		for (uint32_t entryIdx = 0; auto &entry : scene.entries) {
 			printf("\n%s %d/%zu %s\n", scene.name.c_str(), entryIdx++, scene.entries.size(), entry.imageName.c_str());
 			vkRasterFwdROArgs.camera = entry.camera;
 			vkRasterBwdROArgs.fwd.camera = entry.camera;
-			std::size_t pixelBufferSize = 3 * entry.camera.width * entry.camera.height * sizeof(float);
-			if (!vkRasterFwdRWArgs.pOutPixelBuffer || vkRasterFwdRWArgs.pOutPixelBuffer->GetSize() < pixelBufferSize) {
-				vkRasterFwdRWArgs.pOutPixelBuffer = VkCuBuffer::Create(
-				    pDevice, pixelBufferSize, vkgsraster::Rasterizer::GetFwdArgsUsage().outPixelBuffer,
-				    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-			}
-			if (!vkRasterBwdROArgs.pdL_dPixelBuffer ||
-			    vkRasterBwdROArgs.pdL_dPixelBuffer->GetSize() < pixelBufferSize) {
-				auto pdL_dPixelBuffer = VkCuBuffer::Create(pDevice, pixelBufferSize,
-				                                           vkgsraster::Rasterizer::GetBwdArgsUsage().dL_dPixelBuffer,
-				                                           VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-				vkRasterBwdROArgs.pdL_dPixelBuffer = pdL_dPixelBuffer;
-
-				cuperftest::RandomPixels(pdL_dPixelBuffer->GetCudaMappedPtr<float>(), entry.camera.width,
-				                         entry.camera.height);
-			}
 
 			cuTileRasterFwdROArgs.Update(vkRasterFwdROArgs);
 			cuTileRasterFwdRWArgs.Update(vkRasterFwdRWArgs);
