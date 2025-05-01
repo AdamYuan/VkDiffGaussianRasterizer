@@ -32,6 +32,7 @@ struct GSModel {
 	std::vector<SH> shs;
 
 	static GSModel Load(const std::filesystem::path &filename);
+	static uint32_t LoadSplatCount(const std::filesystem::path &filename);
 	bool IsEmpty() const { return splatCount == 0; }
 };
 
