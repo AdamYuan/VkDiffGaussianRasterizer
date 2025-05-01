@@ -282,7 +282,7 @@ int main(int argc, char **argv) {
 
 			PrintError("RRMSE", rrmse);
 			for (uint32_t k = 0; k < kMRECount; ++k)
-				PrintError((std::string("avg ") + mreFuncs[k].GetPrefix()).c_str(), mres[k]);
+				PrintError(mreFuncs[k].GetPrefix().c_str(), mres[k]);
 
 			++sumCount;
 			sumRRMSE += rrmse;
