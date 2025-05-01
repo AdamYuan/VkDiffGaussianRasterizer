@@ -29,6 +29,7 @@ struct GSDataset {
 	bool IsEmpty() const { return scenes.empty(); }
 
 	uint32_t GetMaxSplatCount() const;
+	uint32_t GetMaxPixelCount() const;
 
 	void ResizeCamera(uint32_t width = 0, uint32_t height = 0);
 	void RandomCrop(auto &&randGen, uint32_t entriesPerScene = 0) {
@@ -37,6 +38,13 @@ struct GSDataset {
 				continue;
 			std::shuffle(scene.entries.begin(), scene.entries.end(), randGen);
 			scene.entries.erase(scene.entries.begin() + entriesPerScene, scene.entries.end());
+		}
+	}
+	void SingleCrop() {
+		for (auto &scene : scenes) {
+			if (scene.entries.empty())
+				continue;
+			scene.entries = {scene.entries.front()};
 		}
 	}
 };
