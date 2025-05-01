@@ -49,7 +49,7 @@ void RandomPixels(float *devicePixels, uint32_t width, uint32_t height) {
 	std::vector<float> pixels(3 * pixelCount);
 	std::mt19937 randGen{0};
 	for (float &pixel : pixels) {
-		pixel = std::uniform_real_distribution<float>{}(randGen);
+		pixel = std::uniform_real_distribution<float>{-1.0f, 1.0f}(randGen);
 	}
 	cudaMemcpy(devicePixels, pixels.data(), pixels.size() * sizeof(float), cudaMemcpyHostToDevice);
 	cudaCheckError();
@@ -85,24 +85,19 @@ void WriteDL_DSplatsJSON(const std::filesystem::path &filename, const CuTileRast
 } // namespace cuperftest
 
 void GSGradient::Update(const CuTileRasterizer::SplatArgs &splats, uint32_t splatCount) {
-	if (this->splatCount != splatCount) {
+	if (splatCount != this->splatCount) {
 		this->splatCount = splatCount;
-
-		means.resize(splatCount);
-		scales.resize(splatCount);
-		rotates.resize(splatCount);
-		opacities.resize(splatCount);
-		sh0s.resize(splatCount);
+		values.resize(GetValueCount());
 	}
 
-	static std::vector<GSModel::SH> shs;
-	shs.resize(splatCount);
-
-	cudaMemcpy(means.data(), splats.means, splatCount * sizeof(Mean), cudaMemcpyDeviceToHost);
-	cudaMemcpy(scales.data(), splats.scales, splatCount * sizeof(Scale), cudaMemcpyDeviceToHost);
-	cudaMemcpy(opacities.data(), splats.opacities, splatCount * sizeof(Opacity), cudaMemcpyDeviceToHost);
-	cudaMemcpy(rotates.data(), splats.rotates, splatCount * sizeof(Rotate), cudaMemcpyDeviceToHost);
-	cudaMemcpy(shs.data(), splats.shs, splatCount * sizeof(GSModel::SH), cudaMemcpyDeviceToHost);
-	for (uint32_t i = 0; i < splatCount; ++i)
-		sh0s[i] = shs[i][0];
+	float *dst = values.data();
+	cudaMemcpy(dst, splats.means, splatCount * sizeof(Mean), cudaMemcpyDeviceToHost);
+	dst += splatCount * (sizeof(Mean) / sizeof(float));
+	cudaMemcpy(dst, splats.scales, splatCount * sizeof(Scale), cudaMemcpyDeviceToHost);
+	dst += splatCount * (sizeof(Scale) / sizeof(float));
+	cudaMemcpy(dst, splats.opacities, splatCount * sizeof(Opacity), cudaMemcpyDeviceToHost);
+	dst += splatCount * (sizeof(Opacity) / sizeof(float));
+	cudaMemcpy(dst, splats.rotates, splatCount * sizeof(Rotate), cudaMemcpyDeviceToHost);
+	dst += splatCount * (sizeof(Rotate) / sizeof(float));
+	cudaMemcpy(dst, splats.shs, splatCount * sizeof(GSModel::SH), cudaMemcpyDeviceToHost);
 }
