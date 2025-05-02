@@ -177,7 +177,7 @@ int main(int argc, char **argv) {
 
 	uint32_t sumCount = 0;
 	double sumCuForward = 0, sumVkForward = 0, sumCuBackward = 0, sumVkBackward = 0;
-	double sumVkBackwardDraw = 0;
+	double sumVkForwardDraw = 0, sumVkBackwardDraw = 0;
 
 	for (auto &scene : gsDataset.scenes) {
 		{
@@ -244,6 +244,7 @@ int main(int argc, char **argv) {
 				}
 				vkRasterPerfMetrics = vkRasterPerfQuery.GetMetrics();
 				printf("vk_forward: %lf ms\n", vkRasterPerfMetrics.forward);
+				printf("vk_forward draw: %lf ms\n", vkRasterPerfMetrics.forwardDraw);
 				printf("vk_backward: %lf ms\n", vkRasterPerfMetrics.backward);
 				printf("vk_backward draw: %lf ms\n", vkRasterPerfMetrics.backwardDraw);
 				printf("vk: %lf ms\n", vkRasterPerfMetrics.forward + vkRasterPerfMetrics.backward);
@@ -285,12 +286,14 @@ int main(int argc, char **argv) {
 			sumCuForward += cuTileRasterPerfMetrics.forward;
 			sumCuBackward += cuTileRasterPerfMetrics.backward;
 			sumVkForward += vkRasterPerfMetrics.forward;
+			sumVkForwardDraw += vkRasterPerfMetrics.forwardDraw;
 			sumVkBackward += vkRasterPerfMetrics.backward;
 			sumVkBackwardDraw += vkRasterPerfMetrics.backwardDraw;
 		}
 	}
 
 	printf("avg vk_forward: %lf ms\n", sumVkForward / double(sumCount));
+	printf("avg vk_forward draw: %lf ms\n", sumVkForwardDraw / double(sumCount));
 	printf("avg vk_backward: %lf ms\n", sumVkBackward / double(sumCount));
 	printf("avg vk_backward draw: %lf ms\n", sumVkBackwardDraw / double(sumCount));
 	printf("avg vk: %lf ms\n", (sumVkForward + sumVkBackward) / double(sumCount));
