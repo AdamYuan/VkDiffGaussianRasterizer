@@ -40,6 +40,16 @@ struct GSDataset {
 			scene.entries.erase(scene.entries.begin() + entriesPerScene, scene.entries.end());
 		}
 	}
+	void RandomCrop(auto &&randGen, float scale = 1.0f) {
+		for (auto &scene : scenes) {
+			auto croppedSize = uint32_t((float)scene.entries.size() * scale);
+			croppedSize = std::max(croppedSize, 1u);
+			if (scene.entries.size() <= croppedSize)
+				continue;
+			std::shuffle(scene.entries.begin(), scene.entries.end(), randGen);
+			scene.entries.erase(scene.entries.begin() + croppedSize, scene.entries.end());
+		}
+	}
 	void SingleCrop() {
 		for (auto &scene : scenes) {
 			if (scene.entries.empty())

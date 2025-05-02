@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
 	static constexpr int kStaticArgCount = 1;
 	static constexpr const char *kHelpString =
 	    "./PerformanceTest [dataset] (-w=[width]) (-h=[height]) (-i=[model "
-	    "iteration]) (-e=[entries per scene]) (-w: write result) (-s: single) (-nocu) (-novk)\n";
+	    "iteration]) (-e=[entries per scene]) (-c=[crop ratio]) (-w: write result) (-s: single) (-nocu) (-novk)\n";
 	if (argc < kStaticArgCount) {
 		printf(kHelpString);
 		return EXIT_FAILURE;
@@ -35,6 +35,7 @@ int main(int argc, char **argv) {
 	uint32_t modelIteration = kDefaultModelIteration;
 	uint32_t resizeWidth = 0, resizeHeight = 0;
 	uint32_t entriesPerScene = 0;
+	float cropRatio = 0.0f;
 	bool writeResult = false;
 	bool single = false;
 	bool noCu = false, noVk = false;
@@ -67,6 +68,8 @@ int main(int argc, char **argv) {
 			modelIteration = std::stoul(val);
 		else if (getValue(arg, "-e=", val))
 			entriesPerScene = std::stoul(val);
+		else if (getValue(arg, "-c=", val))
+			cropRatio = std::stof(val);
 		else {
 			printf(kHelpString);
 			return EXIT_FAILURE;
@@ -122,9 +125,16 @@ int main(int argc, char **argv) {
 		return EXIT_FAILURE;
 	}
 	gsDataset.ResizeCamera(resizeWidth, resizeHeight);
-	if (entriesPerScene) {
+	{
 		std::mt19937 randGen{};
-		gsDataset.RandomCrop(randGen, entriesPerScene);
+		if (entriesPerScene && cropRatio != 0.0f) {
+			printf("-e= and -c= cannot be used together\n");
+			return EXIT_FAILURE;
+		}
+		if (entriesPerScene)
+			gsDataset.RandomCrop(randGen, entriesPerScene);
+		if (cropRatio != 0.0f)
+			gsDataset.RandomCrop(randGen, cropRatio);
 	}
 	if (single)
 		gsDataset.SingleCrop();
