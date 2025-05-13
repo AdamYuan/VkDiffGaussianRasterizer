@@ -36,31 +36,36 @@ struct MemStat {
 
 	static MemStat From(const vkgsraster::Rasterizer::Resource &resource) {
 		MemStat stat{};
-		stat.sortMem += resource.pSortKeyBuffer->GetSize();
-		stat.sortMem += resource.pSortPayloadBuffer->GetSize();
-		stat.sortMem += resource.sorterResource.pTempKeyBuffer->GetSize();
-		stat.sortMem += resource.sorterResource.pTempPayloadBuffer->GetSize();
-		stat.sortMem += resource.sorterResource.pGlobalHistBuffer->GetSize();
-		stat.sortMem += resource.sorterResource.pPassHistBuffer->GetSize();
-		stat.sortMem += resource.sorterResource.pIndexBuffer->GetSize();
-		stat.sortMem += resource.sorterResource.pDispatchArgBuffer->GetSize();
+		const auto getBufferSize = [](const myvk::Ptr<myvk::BufferBase> &pBuf) -> std::size_t {
+			if (pBuf)
+				return 0;
+			return pBuf->GetSize();
+		};
+		stat.sortMem += getBufferSize(resource.pSortKeyBuffer);
+		stat.sortMem += getBufferSize(resource.pSortPayloadBuffer);
+		stat.sortMem += getBufferSize(resource.sorterResource.pTempKeyBuffer);
+		stat.sortMem += getBufferSize(resource.sorterResource.pTempPayloadBuffer);
+		stat.sortMem += getBufferSize(resource.sorterResource.pGlobalHistBuffer);
+		stat.sortMem += getBufferSize(resource.sorterResource.pPassHistBuffer);
+		stat.sortMem += getBufferSize(resource.sorterResource.pIndexBuffer);
+		stat.sortMem += getBufferSize(resource.sorterResource.pDispatchArgBuffer);
 		stat.allMem += stat.sortMem;
-		stat.allMem += resource.pSortSplatIndexBuffer->GetSize();
-		stat.allMem += resource.pColorMean2DXBuffer->GetSize();
-		stat.allMem += resource.pConicMean2DYBuffer->GetSize();
-		stat.allMem += resource.pViewOpacityBuffer->GetSize();
-		stat.allMem += resource.pDL_DColorMean2DXBuffer->GetSize();
-		stat.allMem += resource.pDL_DConicMean2DYBuffer->GetSize();
-		stat.allMem += resource.pDL_DViewOpacityBuffer->GetSize();
-		stat.allMem += resource.pQuadBuffer->GetSize();
-		stat.allMem += resource.pDrawArgBuffer->GetSize();
-		stat.allMem += resource.pDispatchArgBuffer->GetSize();
-		const auto getImageSize = [](const myvk::Ptr<myvk::ImageBase> &pImg) {
+		stat.allMem += getBufferSize(resource.pSortSplatIndexBuffer);
+		stat.allMem += getBufferSize(resource.pColorMean2DXBuffer);
+		stat.allMem += getBufferSize(resource.pConicMean2DYBuffer);
+		stat.allMem += getBufferSize(resource.pViewOpacityBuffer);
+		stat.allMem += getBufferSize(resource.pDL_DColorMean2DXBuffer);
+		stat.allMem += getBufferSize(resource.pDL_DConicMean2DYBuffer);
+		stat.allMem += getBufferSize(resource.pDL_DViewOpacityBuffer);
+		stat.allMem += getBufferSize(resource.pQuadBuffer);
+		stat.allMem += getBufferSize(resource.pDrawArgBuffer);
+		stat.allMem += getBufferSize(resource.pDispatchArgBuffer);
+		const auto getImageSize = [](const myvk::Ptr<myvk::ImageBase> &pImg) -> std::size_t {
+			if (!pImg)
+				return 0;
 			std::size_t size = pImg->GetExtent().width * pImg->GetExtent().height;
 			std::size_t formatSize = 4 * sizeof(float);
-			if (pImg->GetFormat() == VK_FORMAT_R16G16B16A16_SFLOAT)
-				formatSize = 4 * sizeof(uint16_t);
-			else if (pImg->GetFormat() == VK_FORMAT_R16G16B16A16_UNORM)
+			if (pImg->GetFormat() == VK_FORMAT_R16G16B16A16_UNORM || pImg->GetFormat() == VK_FORMAT_R16G16B16A16_SFLOAT)
 				formatSize = 4 * sizeof(uint16_t);
 			else if (pImg->GetFormat() == VK_FORMAT_R8G8B8A8_UNORM)
 				formatSize = 4 * sizeof(uint8_t);
