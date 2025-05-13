@@ -37,7 +37,7 @@ struct MemStat {
 	static MemStat From(const vkgsraster::Rasterizer::Resource &resource) {
 		MemStat stat{};
 		const auto getBufferSize = [](const myvk::Ptr<myvk::BufferBase> &pBuf) -> std::size_t {
-			if (pBuf)
+			if (!pBuf)
 				return 0;
 			return pBuf->GetSize();
 		};
