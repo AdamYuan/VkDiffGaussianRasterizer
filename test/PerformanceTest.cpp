@@ -21,6 +21,64 @@ void WriteDL_DSplatsJSON(const std::filesystem::path &filename, const CuTileRast
                          uint32_t splatCount);
 } // namespace cuperftest
 
+struct MemStat {
+	std::size_t sortMem, allMem;
+
+	static MemStat From(const CuTileRasterizer::Resource &resource) {
+		MemStat stat{};
+		stat.sortMem += resource.binningBuffer.size;
+		stat.allMem += stat.sortMem;
+		stat.allMem += resource.imageBuffer.size;
+		stat.allMem += resource.geometryBuffer.size;
+		stat.allMem += resource.dLBuffer.size;
+		return stat;
+	}
+
+	static MemStat From(const vkgsraster::Rasterizer::Resource &resource) {
+		MemStat stat{};
+		stat.sortMem += resource.pSortKeyBuffer->GetSize();
+		stat.sortMem += resource.pSortPayloadBuffer->GetSize();
+		stat.sortMem += resource.sorterResource.pTempKeyBuffer->GetSize();
+		stat.sortMem += resource.sorterResource.pTempPayloadBuffer->GetSize();
+		stat.sortMem += resource.sorterResource.pGlobalHistBuffer->GetSize();
+		stat.sortMem += resource.sorterResource.pPassHistBuffer->GetSize();
+		stat.sortMem += resource.sorterResource.pIndexBuffer->GetSize();
+		stat.sortMem += resource.sorterResource.pDispatchArgBuffer->GetSize();
+		stat.allMem += stat.sortMem;
+		stat.allMem += resource.pSortSplatIndexBuffer->GetSize();
+		stat.allMem += resource.pColorMean2DXBuffer->GetSize();
+		stat.allMem += resource.pConicMean2DYBuffer->GetSize();
+		stat.allMem += resource.pViewOpacityBuffer->GetSize();
+		stat.allMem += resource.pDL_DColorMean2DXBuffer->GetSize();
+		stat.allMem += resource.pDL_DConicMean2DYBuffer->GetSize();
+		stat.allMem += resource.pDL_DViewOpacityBuffer->GetSize();
+		stat.allMem += resource.pQuadBuffer->GetSize();
+		stat.allMem += resource.pDrawArgBuffer->GetSize();
+		stat.allMem += resource.pDispatchArgBuffer->GetSize();
+		const auto getImageSize = [](const myvk::Ptr<myvk::ImageBase> &pImg) {
+			std::size_t size = pImg->GetExtent().width * pImg->GetExtent().height;
+			std::size_t formatSize = 4 * sizeof(float);
+			if (pImg->GetFormat() == VK_FORMAT_R16G16B16A16_SFLOAT)
+				formatSize = 4 * sizeof(uint16_t);
+			else if (pImg->GetFormat() == VK_FORMAT_R16G16B16A16_UNORM)
+				formatSize = 4 * sizeof(uint16_t);
+			else if (pImg->GetFormat() == VK_FORMAT_R8G8B8A8_UNORM)
+				formatSize = 4 * sizeof(uint8_t);
+			return size * formatSize;
+		};
+		stat.allMem += getImageSize(resource.pPixelTImage);
+		stat.allMem += getImageSize(resource.pDL_DPixelImage);
+		return stat;
+	}
+
+	void Print(const char *prefix) const {
+		printf("%s sortMem: %lu = %lf KB = %lf MB = %lf GB\n", prefix, sortMem, (double)sortMem / 1000.0,
+		       (double)sortMem / 1000000.0, (double)sortMem / 1000000000.0);
+		printf("%s allMem: %lu = %lf KB = %lf MB = %lf GB\n", prefix, allMem, (double)allMem / 1000.0,
+		       (double)allMem / 1000000.0, (double)allMem / 1000000000.0);
+	}
+};
+
 int main(int argc, char **argv) {
 	--argc, ++argv;
 	static constexpr int kStaticArgCount = 1;
@@ -325,6 +383,9 @@ int main(int argc, char **argv) {
 	printf("avg speedup_backward draw: %lf\n", sumCuBackwardDraw / sumVkBackwardDraw);
 	printf("avg speedup: %lf\n", (sumCuForward + sumCuBackward) / (sumVkForward + sumVkBackward));
 	printf("avg speedup draw: %lf\n", (sumCuForwardDraw + sumCuBackwardDraw) / (sumVkForwardDraw + sumVkBackwardDraw));
+
+	MemStat::From(cuTileRasterResource).Print("cu");
+	MemStat::From(vkRasterResource).Print("vk");
 
 	return 0;
 }
