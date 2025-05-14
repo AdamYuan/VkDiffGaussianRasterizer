@@ -1,4 +1,5 @@
 #include "../src/Rasterizer.hpp"
+#include "../src/RasterizerF32.hpp"
 #include "CuTileRasterizer.hpp"
 #include "GSDataset.hpp"
 #include "GSModel.hpp"
@@ -233,20 +234,38 @@ int main(int argc, char **argv) {
 	vkgsraster::Rasterizer::FwdROArgs vkRasterFwdROArgs = {};
 	vkgsraster::Rasterizer::FwdRWArgs vkRasterFwdRWArgs = {};
 	vkgsraster::Rasterizer::BwdROArgs vkRasterBwdROArgs = {};
+
+	vkgsraster::RasterizerF32 vkF32Rasterizer{pDevice, {.forwardOutputImage = false}};
+	vkgsraster::RasterizerF32::Resource vkF32RasterResource = {};
+	vkF32RasterResource.UpdateBuffer(pDevice, gsDatasetMaxSplatCount, 0.0);
+	GSGradient vkF32RasterGradient{};
+	vkgsraster::RasterizerF32::FwdROArgs vkF32RasterFwdROArgs = {};
+	vkgsraster::RasterizerF32::FwdRWArgs vkF32RasterFwdRWArgs = {};
+	vkgsraster::RasterizerF32::BwdROArgs vkF32RasterBwdROArgs = {};
+
 	printf("gsDatasetMaxPixelCount: %d\n", gsDatasetMaxPixelCount);
-	vkRasterFwdRWArgs.pOutPixelBuffer = VkCuBuffer::Create(pDevice, gsDatasetMaxPixelCount * 3 * sizeof(float),
-	                                                       vkgsraster::Rasterizer::GetFwdArgsUsage().outPixelBuffer,
-	                                                       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	vkF32RasterFwdRWArgs.pOutPixelBuffer = vkRasterFwdRWArgs.pOutPixelBuffer = VkCuBuffer::Create(
+	    pDevice, gsDatasetMaxPixelCount * 3 * sizeof(float), vkgsraster::Rasterizer::GetFwdArgsUsage().outPixelBuffer,
+	    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	auto pdL_dPixelBuffer = VkCuBuffer::Create(pDevice, gsDatasetMaxPixelCount * 3 * sizeof(float),
 	                                           vkgsraster::Rasterizer::GetBwdArgsUsage().dL_dPixelBuffer,
 	                                           VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	vkRasterBwdROArgs.pdL_dPixelBuffer = pdL_dPixelBuffer;
+	vkF32RasterBwdROArgs.pdL_dPixelBuffer = vkRasterBwdROArgs.pdL_dPixelBuffer = pdL_dPixelBuffer;
 	cuperftest::RandomPixels(pdL_dPixelBuffer->GetCudaMappedPtr<float>(), gsDatasetMaxPixelCount, 1);
-	vkgsraster::Rasterizer::PerfQuery vkRasterPerfQuery = vkgsraster::Rasterizer::PerfQuery::Create(pDevice);
 	vkgsraster::Rasterizer::BwdRWArgs vkRasterBwdRWArgs = {
 	    .dL_dSplats = VkGSModel::Create(pDevice, vkgsraster::Rasterizer::GetBwdArgsUsage().dL_dSplatBuffers,
 	                                    gsDatasetMaxSplatCount, createVkCuBuffer)
 	                      .GetSplatArgs(),
+	};
+	vkgsraster::RasterizerF32::BwdRWArgs vkF32RasterBwdRWArgs = {
+	    .dL_dSplats =
+	        {
+	            .pMeanBuffer = vkRasterBwdRWArgs.dL_dSplats.pMeanBuffer,
+	            .pScaleBuffer = vkRasterBwdRWArgs.dL_dSplats.pScaleBuffer,
+	            .pRotateBuffer = vkRasterBwdRWArgs.dL_dSplats.pRotateBuffer,
+	            .pOpacityBuffer = vkRasterBwdRWArgs.dL_dSplats.pOpacityBuffer,
+	            .pSHBuffer = vkRasterBwdRWArgs.dL_dSplats.pSHBuffer,
+	        },
 	};
 
 	CuTileRasterizer::Resource cuTileRasterResource{};
@@ -254,7 +273,6 @@ int main(int argc, char **argv) {
 	CuTileRasterizer::FwdRWArgs cuTileRasterFwdRWArgs{};
 	CuTileRasterizer::BwdROArgs cuTileRasterBwdROArgs{};
 	CuTileRasterizer::BwdRWArgs cuTileRasterBwdRWArgs{};
-	GSGradient cuTileRasterGradient{};
 
 	uint32_t sumCount = 0;
 	auto sumMRE = TestMRE{};
@@ -277,10 +295,31 @@ int main(int argc, char **argv) {
 		vkRasterFwdROArgs.bgColor = {1.0f, 1.0f, 1.0f};
 		vkRasterBwdROArgs.fwd = vkRasterFwdROArgs;
 
+		vkF32RasterFwdROArgs.splatCount = vkGsModel.splatCount;
+		vkF32RasterFwdROArgs.splats = {
+		    .pMeanBuffer = vkRasterFwdROArgs.splats.pMeanBuffer,
+		    .pScaleBuffer = vkRasterFwdROArgs.splats.pScaleBuffer,
+		    .pRotateBuffer = vkRasterFwdROArgs.splats.pRotateBuffer,
+		    .pOpacityBuffer = vkRasterFwdROArgs.splats.pOpacityBuffer,
+		    .pSHBuffer = vkRasterFwdROArgs.splats.pSHBuffer,
+		};
+		vkF32RasterFwdROArgs.bgColor = {1.0f, 1.0f, 1.0f};
+		vkF32RasterBwdROArgs.fwd = vkF32RasterFwdROArgs;
+
 		for (uint32_t entryIdx = 0; auto &entry : scene.entries) {
 			printf("\n%s %d/%zu %s\n", scene.name.c_str(), entryIdx++, scene.entries.size(), entry.imageName.c_str());
 			vkRasterFwdROArgs.camera = entry.camera;
 			vkRasterBwdROArgs.fwd.camera = entry.camera;
+
+			vkF32RasterFwdROArgs.camera = {
+			    .width = entry.camera.width,
+			    .height = entry.camera.height,
+			    .focalX = entry.camera.focalX,
+			    .focalY = entry.camera.focalY,
+			    .viewMat = entry.camera.viewMat,
+			    .pos = entry.camera.pos,
+			};
+			vkF32RasterBwdROArgs.fwd.camera = vkF32RasterFwdROArgs.camera;
 
 			cuTileRasterFwdROArgs.Update(vkRasterFwdROArgs);
 			cuTileRasterFwdRWArgs.Update(vkRasterFwdRWArgs);
@@ -312,15 +351,31 @@ int main(int argc, char **argv) {
 
 			// Cuda
 			{
-				CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource);
+				vkF32RasterResource.UpdateImage(pDevice, entry.camera.width, entry.camera.height, vkF32Rasterizer);
+				const auto runVkCommand = [&](auto &&cmdRun) {
+					pCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+					cmdRun();
+					pCommandBuffer->End();
+					pCommandBuffer->Submit(pFence);
+					pFence->Wait();
+					pCommandPool->Reset();
+					pFence->Reset();
+				};
+				runVkCommand([&] {
+					vkF32Rasterizer.CmdForward(pCommandBuffer, vkF32RasterFwdROArgs, vkF32RasterFwdRWArgs,
+					                           vkF32RasterResource);
+				});
 				cuperftest::ClearDL_DSplats(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
-				CuTileRasterizer::Backward(cuTileRasterBwdROArgs, cuTileRasterBwdRWArgs, cuTileRasterResource);
-				cuTileRasterGradient.Update(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
+				runVkCommand([&] {
+					vkF32Rasterizer.CmdBackward(pCommandBuffer, vkF32RasterBwdROArgs, vkF32RasterBwdRWArgs,
+					                            vkF32RasterResource);
+				});
+				vkF32RasterGradient.Update(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
 			}
 
-			TestMRE mre = cuTileRasterGradient.GetError(vkRasterGradient, TestMRE::Func{});
-			double rmse = cuTileRasterGradient.GetError(vkRasterGradient, kRMSEFunc);
-			double signAcc = cuTileRasterGradient.GetError(vkRasterGradient, kSignAccuracyFunc);
+			TestMRE mre = vkF32RasterGradient.GetError(vkRasterGradient, TestMRE::Func{});
+			double rmse = vkF32RasterGradient.GetError(vkRasterGradient, kRMSEFunc);
+			double signAcc = vkF32RasterGradient.GetError(vkRasterGradient, kSignAccuracyFunc);
 			mre.Print();
 			printf("RMSE: %.10lf\n", rmse);
 			printf("+/- Accuracy: %.10lf\n", signAcc);
