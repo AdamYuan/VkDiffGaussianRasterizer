@@ -242,6 +242,8 @@ int main(int argc, char **argv) {
 	double sumCuForward = 0, sumVkForward = 0, sumCuBackward = 0, sumVkBackward = 0;
 	double sumCuForwardDraw = 0, sumVkForwardDraw = 0, sumCuBackwardDraw = 0, sumVkBackwardDraw = 0;
 
+	std::size_t vkAllMem{};
+
 	for (auto &scene : gsDataset.scenes) {
 		{
 			auto gsModel = GSModel::Load(scene.modelFilename);
@@ -365,6 +367,8 @@ int main(int argc, char **argv) {
 			sumVkForwardDraw += vkRasterPerfMetrics.forwardDraw;
 			sumVkBackward += vkRasterPerfMetrics.backward;
 			sumVkBackwardDraw += vkRasterPerfMetrics.backwardDraw;
+
+			vkAllMem = std::max(vkAllMem, MemStat::From(vkRasterResource).allMem);
 		}
 	}
 
@@ -390,7 +394,9 @@ int main(int argc, char **argv) {
 	printf("avg speedup draw: %lf\n", (sumCuForwardDraw + sumCuBackwardDraw) / (sumVkForwardDraw + sumVkBackwardDraw));
 
 	MemStat::From(cuTileRasterResource).Print("cu");
-	MemStat::From(vkRasterResource).Print("vk");
+	auto vkMemStat = MemStat::From(vkRasterResource);
+	vkMemStat.allMem = vkAllMem;
+	vkMemStat.Print("vk");
 
 	return 0;
 }
