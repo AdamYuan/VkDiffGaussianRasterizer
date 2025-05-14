@@ -50,6 +50,9 @@ add_library(vkgsraster_Rasterizer STATIC
         src/Rasterizer.hpp
         src/Rasterizer.cpp
         src/RasterizerShader.cpp
+        src/RasterizerF32.hpp
+        src/RasterizerF32.cpp
+        src/RasterizerF32Shader.cpp
 )
 add_library(vkgsraster::Rasterizer ALIAS vkgsraster_Rasterizer)
 target_link_libraries(vkgsraster_Rasterizer PUBLIC
