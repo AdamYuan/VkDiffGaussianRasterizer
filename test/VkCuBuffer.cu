@@ -27,7 +27,7 @@ myvk::Ptr<VkCuBuffer> VkCuBuffer::Create(const myvk::Ptr<myvk::Device> &pDevice,
 		cuExtMemHandleDesc.type = cudaExternalMemoryHandleTypeOpaqueFd;
 
 #ifdef _WIN64
-	cuExtMemHandleDesc.handle.win32.handle = handle.mem_handle;
+	cuExtMemHandleDesc.handle.win32.handle = vkExtBufHandle.mem_handle;
 #else
 	cuExtMemHandleDesc.handle.fd = (int)(uintptr_t)vkExtBufHandle.mem_handle;
 #endif
