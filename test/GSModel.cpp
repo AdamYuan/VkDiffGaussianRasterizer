@@ -34,7 +34,7 @@ uint32_t GSModel::LoadSplatCount(const std::filesystem::path &filename) {
 }
 
 GSModel GSModel::Load(const std::filesystem::path &filename) {
-	std::ifstream fin{filename};
+	std::ifstream fin{filename, std::ios::binary};
 	if (!fin.is_open())
 		return {};
 
