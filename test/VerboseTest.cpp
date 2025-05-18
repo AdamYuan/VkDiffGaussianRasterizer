@@ -24,9 +24,8 @@ void WriteDL_DSplatsJSON(const std::filesystem::path &filename, const CuTileRast
 int main(int argc, char **argv) {
 	--argc, ++argv;
 	static constexpr int kStaticArgCount = 1;
-	static constexpr const char *kHelpString =
-	    "./VerboseTest [dataset] (-w=[width]) (-h=[height]) (-i=[model "
-	    "iteration]) (-e=[entries per scene]) (-w: write result) (-s: single)\n";
+	static constexpr const char *kHelpString = "./VerboseTest [dataset] (-w=[width]) (-h=[height]) (-i=[model "
+	                                           "iteration]) (-e=[entries per scene]) (-w: write result) (-s: single)\n";
 	if (argc < kStaticArgCount) {
 		printf(kHelpString);
 		return EXIT_FAILURE;
@@ -72,7 +71,15 @@ int main(int argc, char **argv) {
 	myvk::Ptr<myvk::Queue> pGenericQueue;
 	{
 		auto pInstance = myvk::Instance::Create({});
-		auto pPhysicalDevice = myvk::PhysicalDevice::Fetch(pInstance)[0];
+		auto pPhysicalDevice = [&pInstance] {
+			auto pPhysicalDevices = myvk::PhysicalDevice::Fetch(pInstance);
+			for (const auto &pPhysicalDevice : pPhysicalDevices) {
+				if (pPhysicalDevice->GetProperties().vk10.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+					return pPhysicalDevice;
+			}
+			return pPhysicalDevices[0];
+		}();
+		printf("GPU: %s\n", pPhysicalDevice->GetProperties().vk10.deviceName);
 		auto features = pPhysicalDevice->GetDefaultFeatures();
 		VkPhysicalDeviceShaderAtomicFloatFeaturesEXT shaderAtomicFloatFeature{
 		    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT,
@@ -137,11 +144,11 @@ int main(int argc, char **argv) {
 	vkgsraster::Rasterizer::BwdROArgs vkRasterBwdROArgs = {};
 	printf("gsDatasetMaxPixelCount: %d\n", gsDatasetMaxPixelCount);
 	vkRasterFwdRWArgs.pOutPixelBuffer = VkCuBuffer::Create(pDevice, gsDatasetMaxPixelCount * 3 * sizeof(float),
-														   vkgsraster::Rasterizer::GetFwdArgsUsage().outPixelBuffer,
-														   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	                                                       vkgsraster::Rasterizer::GetFwdArgsUsage().outPixelBuffer,
+	                                                       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	auto pdL_dPixelBuffer = VkCuBuffer::Create(pDevice, gsDatasetMaxPixelCount * 3 * sizeof(float),
-											   vkgsraster::Rasterizer::GetBwdArgsUsage().dL_dPixelBuffer,
-											   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	                                           vkgsraster::Rasterizer::GetBwdArgsUsage().dL_dPixelBuffer,
+	                                           VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	vkRasterBwdROArgs.pdL_dPixelBuffer = pdL_dPixelBuffer;
 	cuperftest::RandomPixels(pdL_dPixelBuffer->GetCudaMappedPtr<float>(), gsDatasetMaxPixelCount, 1);
 	vkgsraster::Rasterizer::BwdRWArgs vkRasterBwdRWArgs = {
