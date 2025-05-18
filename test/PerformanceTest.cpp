@@ -143,7 +143,15 @@ int main(int argc, char **argv) {
 	myvk::Ptr<myvk::Queue> pGenericQueue;
 	{
 		auto pInstance = myvk::Instance::Create({});
-		auto pPhysicalDevice = myvk::PhysicalDevice::Fetch(pInstance)[0];
+		auto pPhysicalDevice = [&pInstance] {
+			auto pPhysicalDevices = myvk::PhysicalDevice::Fetch(pInstance);
+			for (const auto &pPhysicalDevice : pPhysicalDevices) {
+				if (pPhysicalDevice->GetProperties().vk10.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+					return pPhysicalDevice;
+			}
+			return pPhysicalDevices[0];
+		}();
+		printf("GPU: %s\n", pPhysicalDevice->GetProperties().vk10.deviceName);
 		auto features = pPhysicalDevice->GetDefaultFeatures();
 		VkPhysicalDeviceShaderAtomicFloatFeaturesEXT shaderAtomicFloatFeature{
 		    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT,
