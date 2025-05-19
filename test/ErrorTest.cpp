@@ -25,39 +25,34 @@ void WriteDL_DSplatsJSON(const std::filesystem::path &filename, const CuTileRast
                          uint32_t splatCount);
 } // namespace cuperftest
 
-constexpr float kZeroThreshold = 1e-8f;
+struct RMSE {
+	double sum{};
+	uint64_t count{};
 
-const auto kRMSEFunc = [](std::span<const float> y, std::span<const float> yHat) {
-	double sum = 0;
-	float yMin = std::numeric_limits<float>::max(), yMax = -std::numeric_limits<float>::max();
-	uint32_t count = 0;
-	for (uint32_t i = 0; i < y.size(); ++i) {
-		float absY = std::abs(y[i]);
-		if (absY >= kZeroThreshold) {
-			if (i < 10)
-				printf("%f, %f\n", y[i], yHat[i]);
-			auto d = double(y[i] - yHat[i]);
-			sum += d * d;
-			yMin = std::min(yMin, y[i]);
-			yMax = std::max(yMax, y[i]);
-			++count;
+	struct Func {
+		RMSE operator()(std::span<const float> y, std::span<const float> yHat) const {
+			double sum = 0;
+			uint32_t count = 0;
+			for (uint32_t i = 0; i < y.size(); ++i) {
+				if (i < 10)
+					printf("%f, %f\n", y[i], yHat[i]);
+				auto d = double(y[i] - yHat[i]);
+				sum += d * d;
+			}
+			printf("\n\n");
+			return RMSE{.sum = sum, .count = (uint64_t)y.size()};
 		}
-	}
-	printf("\n\n");
-	return std::sqrt(sum / double(count));
-};
+	};
 
-const auto kSignAccuracyFunc = [](std::span<const float> y, std::span<const float> yHat) {
-	uint32_t count = 0;
-	uint32_t correctCount = 0;
-	for (uint32_t i = 0; i < y.size(); ++i) {
-		float absY = std::abs(y[i]);
-		if (absY >= kZeroThreshold) {
-			correctCount += ((y[i] > 0) == (yHat[i] > 0));
-			++count;
-		}
+	RMSE &operator+=(const RMSE &rRMSE) {
+		sum += rRMSE.sum;
+		count += rRMSE.count;
+		return *this;
 	}
-	return double(correctCount) / double(count);
+
+	void Print(const char *prefix = "") const {
+		printf("%sRMSE = %lf, count = %lu\n", prefix, std::sqrt(sum / double(count)), count);
+	}
 };
 
 struct MRERange {
@@ -68,12 +63,12 @@ template <MRERange... Ranges_V> struct MRE {
 	static constexpr std::array kRanges = {Ranges_V...};
 	static constexpr std::size_t kRangeCount = sizeof...(Ranges_V);
 	std::array<double, kRangeCount> errors{};
+	std::array<uint64_t, kRangeCount> counts{};
 
 	struct Func {
 		MRE operator()(std::span<const float> y, std::span<const float> yHat) const {
 			std::array<double, kRangeCount> sums{};
-			std::array<uint32_t, kRangeCount> counts{};
-			uint32_t nonZeroCount{};
+			std::array<uint64_t, kRangeCount> counts{};
 			for (uint32_t i = 0; i < y.size(); ++i) {
 				float absY = std::abs(y[i]);
 				for (uint32_t r = 0; r < kRangeCount; ++r) {
@@ -83,33 +78,23 @@ template <MRERange... Ranges_V> struct MRE {
 						++counts[r];
 					}
 				}
-				if (absY >= kZeroThreshold)
-					++nonZeroCount;
 			}
-			uint32_t count = 0;
-			for (uint32_t r = 0; r < kRangeCount; ++r) {
-				sums[r] /= double(counts[r]);
-				count += counts[r];
-			}
-			printf("Coverage: %u/%u = %lf\n", count, nonZeroCount, double(count) / double(nonZeroCount));
-			return MRE{.errors = sums};
+			return MRE{.errors = sums, .counts = counts};
 		}
 	};
 
 	MRE &operator+=(const MRE &rMRE) {
-		for (uint32_t r = 0; r < kRangeCount; ++r)
+		for (uint32_t r = 0; r < kRangeCount; ++r) {
 			errors[r] += rMRE.errors[r];
-		return *this;
-	}
-	MRE &operator/=(double rVal) {
-		for (uint32_t r = 0; r < kRangeCount; ++r)
-			errors[r] /= rVal;
+			counts[r] += rMRE.counts[r];
+		}
 		return *this;
 	}
 
 	void Print(const char *prefix = "") const {
 		for (uint32_t r = 0; r < kRangeCount; ++r) {
-			printf("%sMRE [%f, %f) = %lf\n", prefix, kRanges[r].yMin, kRanges[r].yMax, errors[r]);
+			printf("%sMRE [%f, %f) = %lf, count = %lu\n", prefix, kRanges[r].yMin, kRanges[r].yMax,
+			       errors[r] / double(counts[r]), counts[r]);
 		}
 	}
 };
@@ -282,9 +267,8 @@ int main(int argc, char **argv) {
 	CuTileRasterizer::BwdROArgs cuTileRasterBwdROArgs{};
 	CuTileRasterizer::BwdRWArgs cuTileRasterBwdRWArgs{};
 
-	uint32_t sumCount = 0;
 	auto sumMRE = TestMRE{};
-	double sumRMSE = 0, sumSignAcc = 0;
+	auto sumRMSE = RMSE{};
 
 	for (auto &scene : gsDataset.scenes) {
 		{
@@ -382,25 +366,17 @@ int main(int argc, char **argv) {
 			}
 
 			TestMRE mre = vkF32RasterGradient.GetError(vkRasterGradient, TestMRE::Func{});
-			double rmse = vkF32RasterGradient.GetError(vkRasterGradient, kRMSEFunc);
-			double signAcc = vkF32RasterGradient.GetError(vkRasterGradient, kSignAccuracyFunc);
+			RMSE rmse = vkF32RasterGradient.GetError(vkRasterGradient, RMSE::Func{});
 			mre.Print();
-			printf("RMSE: %.10lf\n", rmse);
-			printf("+/- Accuracy: %.10lf\n", signAcc);
+			rmse.Print();
 
-			++sumCount;
 			sumMRE += mre;
 			sumRMSE += rmse;
-			sumSignAcc += signAcc;
 		}
 	}
 
-	sumMRE /= double(sumCount);
-	sumRMSE /= double(sumCount);
-	sumSignAcc /= double(sumCount);
 	sumMRE.Print("avg ");
-	printf("avg RMSE: %.10lf\n", sumRMSE);
-	printf("avg +/- Accuracy: %.10lf\n", sumSignAcc);
+	sumRMSE.Print("avg ");
 
 	return 0;
 }
