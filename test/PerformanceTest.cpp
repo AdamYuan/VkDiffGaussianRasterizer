@@ -220,6 +220,7 @@ int main(int argc, char **argv) {
 	vkgsraster::Rasterizer::FwdROArgs vkRasterFwdROArgs = {};
 	vkgsraster::Rasterizer::FwdRWArgs vkRasterFwdRWArgs = {};
 	vkgsraster::Rasterizer::BwdROArgs vkRasterBwdROArgs = {};
+	printf("gsDatasetMaxSplatCount: %d\n", gsDatasetMaxSplatCount);
 	printf("gsDatasetMaxPixelCount: %d\n", gsDatasetMaxPixelCount);
 	vkRasterFwdRWArgs.pOutPixelBuffer = VkCuBuffer::Create(pDevice, gsDatasetMaxPixelCount * 3 * sizeof(float),
 	                                                       vkgsraster::Rasterizer::GetFwdArgsUsage().outPixelBuffer,
