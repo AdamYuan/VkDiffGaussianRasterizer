@@ -2,7 +2,7 @@
 
 #define RASTERIZER_LOAD_SPLAT
 #define RASTERIZER_LOAD_DL_DSPLAT_VIEW
-#define RASTERIZER_STORE_DL_DSPLAT
+#define RASTERIZER_ADD_DL_DSPLAT
 #include "Common.glsl"
 
 layout(local_size_x = BACKWARD_VIEW_DIM, local_size_y = 1, local_size_z = 1) in;
@@ -26,5 +26,5 @@ void main() {
 
 	Splat dL_dSplat = bwd_splat2splatView(splat, camera, dL_dSplatView);
 
-	storeDL_DSplat(splatIdx, dL_dSplat);
+	addDL_DSplat(splatIdx, dL_dSplat);
 }

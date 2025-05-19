@@ -166,6 +166,43 @@ void storeDL_DSplat(uint splatIdx, Splat dL_dSplat) {
 }
 #endif
 
+// DL_DSplat Add
+#ifdef RASTERIZER_ADD_DL_DSPLAT
+layout(std430, binding = SBUF_DL_DMEANS_BINDING) buffer bDL_DMeans { Vec3Std430 gDL_DMeans[]; };
+layout(std430, binding = SBUF_DL_DSCALES_BINDING) buffer bDL_DScales { Vec3Std430 gDL_DScales[]; };
+layout(std430, binding = SBUF_DL_DROTATES_BINDING) buffer bDL_DRotates { vec4 gDL_DRotates[]; };
+layout(std430, binding = SBUF_DL_DOPACITIES_BINDING) buffer bDL_DOpacities { float gDL_DOpacities[]; };
+layout(std430, binding = SBUF_DL_DSHS_BINDING) buffer bDL_DSHs { SHStd430 gDL_DSHs[]; };
+void addDL_DSplat(uint splatIdx, Splat dL_dSplat) {
+	Vec3Std430 dL_dMean = gDL_DMeans[splatIdx];
+	Vec3Std430 dL_dScale = gDL_DScales[splatIdx];
+	vec4 dL_dRotate = gDL_DRotates[splatIdx];
+	float dL_dOpacity = gDL_DOpacities[splatIdx];
+	SHStd430 dL_dSH = gDL_DSHs[splatIdx];
+
+	dL_dMean.vec[0] += dL_dSplat.geom.mean[0];
+	dL_dMean.vec[1] += dL_dSplat.geom.mean[1];
+	dL_dMean.vec[2] += dL_dSplat.geom.mean[2];
+	dL_dScale.vec[0] += dL_dSplat.geom.scale[0];
+	dL_dScale.vec[1] += dL_dSplat.geom.scale[1];
+	dL_dScale.vec[2] += dL_dSplat.geom.scale[2];
+	dL_dRotate += dL_dSplat.geom.quat;
+	dL_dOpacity += dL_dSplat.geom.opacity;
+	[[unroll]]
+	for (uint i = 0; i < SH_SIZE; ++i) {
+		dL_dSH.vec[i * 3 + 0] += dL_dSplat.sh.data[i].x;
+		dL_dSH.vec[i * 3 + 1] += dL_dSplat.sh.data[i].y;
+		dL_dSH.vec[i * 3 + 2] += dL_dSplat.sh.data[i].z;
+	}
+
+	gDL_DMeans[splatIdx] = dL_dMean;
+	gDL_DScales[splatIdx] = dL_dScale;
+	gDL_DRotates[splatIdx] = dL_dRotate;
+	gDL_DOpacities[splatIdx] = dL_dOpacity;
+	gDL_DSHs[splatIdx] = dL_dSH;
+}
+#endif
+
 // DL_DSplatView Load
 #ifdef RASTERIZER_LOAD_DL_DSPLAT_VIEW
 layout(std430, binding = SBUF_DL_DCOLORS_MEAN2DXS_BINDING) readonly buffer bDL_DColors_Mean2DXs {

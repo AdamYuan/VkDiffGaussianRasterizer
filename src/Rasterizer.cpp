@@ -890,13 +890,15 @@ const Rasterizer::FwdArgsUsage &Rasterizer::GetFwdArgsUsage() {
 
 const Rasterizer::BwdRWArgsSyncState &Rasterizer::GetSrcBwdRWArgsSync() {
 	static constexpr BwdRWArgsSyncState kSync = {
-	    .dL_dSplatBuffers = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	    .dL_dSplatBuffers = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+	                         VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
 	};
 	return kSync;
 }
 const Rasterizer::BwdRWArgsSyncState &Rasterizer::GetDstBwdRWArgsSync() {
 	static constexpr BwdRWArgsSyncState kSync = {
-	    .dL_dSplatBuffers = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
+	    .dL_dSplatBuffers = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+	                         VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT},
 	};
 	return kSync;
 }
