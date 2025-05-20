@@ -84,6 +84,59 @@ struct MemStat {
 	}
 };
 
+struct PerfStat {
+	double cuForward = 0, vkForward = 0, cuBackward = 0, vkBackward = 0;
+	double cuForwardDraw = 0, vkForwardDraw = 0, cuBackwardDraw = 0, vkBackwardDraw = 0;
+
+	void Print(const char *prefix) const {
+		printf("%s vk_forward: %lf ms\n", prefix, vkForward);
+		printf("%s vk_forward draw: %lf ms\n", prefix, vkForwardDraw);
+		printf("%s vk_backward: %lf ms\n", prefix, vkBackward);
+		printf("%s vk_backward draw: %lf ms\n", prefix, vkBackwardDraw);
+		printf("%s vk: %lf ms\n", prefix, (vkForward + vkBackward));
+		printf("%s vk draw: %lf ms\n", prefix, (vkForwardDraw + vkBackwardDraw));
+
+		printf("%s cu_forward: %lf ms\n", prefix, cuForward);
+		printf("%s cu_forward draw: %lf ms\n", prefix, cuForwardDraw);
+		printf("%s cu_backward: %lf ms\n", prefix, cuBackward);
+		printf("%s cu_backward draw: %lf ms\n", prefix, cuBackwardDraw);
+		printf("%s cu: %lf ms\n", prefix, (cuForward + cuBackward));
+		printf("%s cu draw: %lf ms\n", prefix, (cuForwardDraw + cuBackwardDraw));
+
+		printf("%s speedup_forward: %lf\n", prefix, cuForward / vkForward);
+		printf("%s speedup_forward draw: %lf\n", prefix, cuForwardDraw / vkForwardDraw);
+		printf("%s speedup_backward: %lf\n", prefix, cuBackward / vkBackward);
+		printf("%s speedup_backward draw: %lf\n", prefix, cuBackwardDraw / vkBackwardDraw);
+		printf("%s speedup: %lf\n", prefix, (cuForward + cuBackward) / (vkForward + vkBackward));
+		printf("%s speedup draw: %lf\n", prefix, (cuForwardDraw + cuBackwardDraw) / (vkForwardDraw + vkBackwardDraw));
+	}
+
+	static PerfStat Average(auto &&range) {
+		PerfStat stat{};
+		uint32_t count = 0;
+		for (const PerfStat &r : range) {
+			stat.cuForward += r.cuForward;
+			stat.vkForward += r.vkForward;
+			stat.cuBackward += r.cuBackward;
+			stat.vkBackward += r.vkBackward;
+			stat.cuForwardDraw += r.cuForwardDraw;
+			stat.vkForwardDraw += r.vkForwardDraw;
+			stat.cuBackwardDraw += r.cuBackwardDraw;
+			stat.vkBackwardDraw += r.vkBackwardDraw;
+			++count;
+		}
+		stat.cuForward /= double(count);
+		stat.vkForward /= double(count);
+		stat.cuBackward /= double(count);
+		stat.vkBackward /= double(count);
+		stat.cuForwardDraw /= double(count);
+		stat.vkForwardDraw /= double(count);
+		stat.cuBackwardDraw /= double(count);
+		stat.vkBackwardDraw /= double(count);
+		return stat;
+	}
+};
+
 int main(int argc, char **argv) {
 	--argc, ++argv;
 	static constexpr int kStaticArgCount = 1;
@@ -247,11 +300,8 @@ int main(int argc, char **argv) {
 	CuTileRasterizer::BwdRWArgs cuTileRasterBwdRWArgs{};
 	auto cuTileRasterPerfQuery = CuTileRasterizer::PerfQuery::Create();
 
-	uint32_t sumCount = 0;
-	double sumCuForward = 0, sumVkForward = 0, sumCuBackward = 0, sumVkBackward = 0;
-	double sumCuForwardDraw = 0, sumVkForwardDraw = 0, sumCuBackwardDraw = 0, sumVkBackwardDraw = 0;
-
 	std::size_t vkAllMem{};
+	std::vector<PerfStat> perfStats;
 
 	for (auto &scene : gsDataset.scenes) {
 		{
@@ -269,6 +319,8 @@ int main(int argc, char **argv) {
 		vkRasterFwdROArgs.splats = vkGsModel.GetSplatArgs();
 		vkRasterFwdROArgs.bgColor = {1.0f, 1.0f, 1.0f};
 		vkRasterBwdROArgs.fwd = vkRasterFwdROArgs;
+
+		std::vector<PerfStat> scenePerfStats;
 
 		for (uint32_t entryIdx = 0; auto &entry : scene.entries) {
 			printf("\n%s %d/%zu %s\n", scene.name.c_str(), entryIdx++, scene.entries.size(), entry.imageName.c_str());
@@ -317,12 +369,6 @@ int main(int argc, char **argv) {
 					                                std::min(vkGsModel.splatCount, kMaxWriteSplatCount));
 				}
 				vkRasterPerfMetrics = vkRasterPerfQuery.GetMetrics();
-				printf("vk_forward: %lf ms\n", vkRasterPerfMetrics.forward);
-				printf("vk_forward draw: %lf ms\n", vkRasterPerfMetrics.forwardDraw);
-				printf("vk_backward: %lf ms\n", vkRasterPerfMetrics.backward);
-				printf("vk_backward draw: %lf ms\n", vkRasterPerfMetrics.backwardDraw);
-				printf("vk: %lf ms\n", vkRasterPerfMetrics.forward + vkRasterPerfMetrics.backward);
-				printf("vk draw: %lf ms\n", vkRasterPerfMetrics.forwardDraw + vkRasterPerfMetrics.backwardDraw);
 			}
 
 			// Cuda
@@ -343,64 +389,30 @@ int main(int argc, char **argv) {
 					                                std::min(vkGsModel.splatCount, kMaxWriteSplatCount));
 				}
 				cuTileRasterPerfMetrics = cuTileRasterPerfQuery.GetMetrics();
-				printf("cu_forward: %lf ms (numRendered = %d)\n", cuTileRasterPerfMetrics.forward,
-				       cuTileRasterResource.numRendered);
-				printf("cu_forward draw: %lf ms\n", cuTileRasterPerfMetrics.forwardDraw);
-				printf("cu_backward: %lf ms\n", cuTileRasterPerfMetrics.backward);
-				printf("cu_backward draw: %lf ms\n", cuTileRasterPerfMetrics.backwardDraw);
-				printf("cu: %lf ms\n", cuTileRasterPerfMetrics.forward + cuTileRasterPerfMetrics.backward);
-				printf("cu draw: %lf ms\n", cuTileRasterPerfMetrics.forwardDraw + cuTileRasterPerfMetrics.backwardDraw);
 			}
 
-			if (!noCu && !noVk) {
-				// Speed Up
-				printf("speedup_forward: %lf\n", cuTileRasterPerfMetrics.forward / vkRasterPerfMetrics.forward);
-				printf("speedup_backward: %lf\n", cuTileRasterPerfMetrics.backward / vkRasterPerfMetrics.backward);
-				printf("speedup_forward draw: %lf\n",
-				       cuTileRasterPerfMetrics.forwardDraw / vkRasterPerfMetrics.forwardDraw);
-				printf("speedup_backward draw: %lf\n",
-				       cuTileRasterPerfMetrics.backwardDraw / vkRasterPerfMetrics.backwardDraw);
-				printf("speedup: %lf\n", (cuTileRasterPerfMetrics.forward + cuTileRasterPerfMetrics.backward) /
-				                             (vkRasterPerfMetrics.forward + vkRasterPerfMetrics.backward));
-				printf("speedup draw: %lf\n",
-				       (cuTileRasterPerfMetrics.forwardDraw + cuTileRasterPerfMetrics.backwardDraw) /
-				           (vkRasterPerfMetrics.forwardDraw + vkRasterPerfMetrics.backwardDraw));
-			}
-
-			++sumCount;
-			sumCuForward += cuTileRasterPerfMetrics.forward;
-			sumCuForwardDraw += cuTileRasterPerfMetrics.forwardDraw;
-			sumCuBackward += cuTileRasterPerfMetrics.backward;
-			sumCuBackwardDraw += cuTileRasterPerfMetrics.backwardDraw;
-			sumVkForward += vkRasterPerfMetrics.forward;
-			sumVkForwardDraw += vkRasterPerfMetrics.forwardDraw;
-			sumVkBackward += vkRasterPerfMetrics.backward;
-			sumVkBackwardDraw += vkRasterPerfMetrics.backwardDraw;
+			PerfStat entryPerfStat{
+			    .cuForward = cuTileRasterPerfMetrics.forward,
+			    .vkForward = vkRasterPerfMetrics.forward,
+			    .cuBackward = cuTileRasterPerfMetrics.backward,
+			    .vkBackward = vkRasterPerfMetrics.backward,
+			    .cuForwardDraw = cuTileRasterPerfMetrics.forwardDraw,
+			    .vkForwardDraw = vkRasterPerfMetrics.forwardDraw,
+			    .cuBackwardDraw = cuTileRasterPerfMetrics.backwardDraw,
+			    .vkBackwardDraw = vkRasterPerfMetrics.backwardDraw,
+			};
+			entryPerfStat.Print("");
+			scenePerfStats.push_back(entryPerfStat);
 
 			vkAllMem = std::max(vkAllMem, MemStat::From(vkRasterResource).allMem);
 		}
+
+		auto scenePerfStat = PerfStat::Average(scenePerfStats);
+		scenePerfStat.Print(scene.name.c_str());
+		perfStats.push_back(scenePerfStat);
 	}
 
-	printf("avg vk_forward: %lf ms\n", sumVkForward / double(sumCount));
-	printf("avg vk_forward draw: %lf ms\n", sumVkForwardDraw / double(sumCount));
-	printf("avg vk_backward: %lf ms\n", sumVkBackward / double(sumCount));
-	printf("avg vk_backward draw: %lf ms\n", sumVkBackwardDraw / double(sumCount));
-	printf("avg vk: %lf ms\n", (sumVkForward + sumVkBackward) / double(sumCount));
-	printf("avg vk draw: %lf ms\n", (sumVkForwardDraw + sumVkBackwardDraw) / double(sumCount));
-
-	printf("avg cu_forward: %lf ms\n", sumCuForward / double(sumCount));
-	printf("avg cu_forward draw: %lf ms\n", sumCuForwardDraw / double(sumCount));
-	printf("avg cu_backward: %lf ms\n", sumCuBackward / double(sumCount));
-	printf("avg cu_backward draw: %lf ms\n", sumCuBackwardDraw / double(sumCount));
-	printf("avg cu: %lf ms\n", (sumCuForward + sumCuBackward) / double(sumCount));
-	printf("avg cu draw: %lf ms\n", (sumCuForwardDraw + sumCuBackwardDraw) / double(sumCount));
-
-	printf("avg speedup_forward: %lf\n", sumCuForward / sumVkForward);
-	printf("avg speedup_forward draw: %lf\n", sumCuForwardDraw / sumVkForwardDraw);
-	printf("avg speedup_backward: %lf\n", sumCuBackward / sumVkBackward);
-	printf("avg speedup_backward draw: %lf\n", sumCuBackwardDraw / sumVkBackwardDraw);
-	printf("avg speedup: %lf\n", (sumCuForward + sumCuBackward) / (sumVkForward + sumVkBackward));
-	printf("avg speedup draw: %lf\n", (sumCuForwardDraw + sumCuBackwardDraw) / (sumVkForwardDraw + sumVkBackwardDraw));
+	PerfStat::Average(perfStats).Print("avg");
 
 	MemStat::From(cuTileRasterResource).Print("cu");
 	auto vkMemStat = MemStat::From(vkRasterResource);
