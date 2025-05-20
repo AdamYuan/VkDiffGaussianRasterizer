@@ -1,5 +1,6 @@
 #include "../src/DeviceSorter.hpp"
 
+#include <array>
 #include <random>
 
 #include <myvk/FrameManager.hpp>
