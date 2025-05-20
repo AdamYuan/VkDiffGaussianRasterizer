@@ -19,6 +19,7 @@ void RandomPixels(float *devicePixels, uint32_t width, uint32_t height);
 void ClearDL_DSplats(const CuTileRasterizer::SplatArgs &splats, uint32_t splatCount);
 void WriteDL_DSplatsJSON(const std::filesystem::path &filename, const CuTileRasterizer::SplatArgs &splats,
                          uint32_t splatCount);
+myvk::Ptr<myvk::PhysicalDevice> SelectPhysicalDevice(const myvk::Ptr<myvk::Instance> &pInstance);
 } // namespace cuperftest
 
 struct VerboseStat {
@@ -91,15 +92,7 @@ int main(int argc, char **argv) {
 	myvk::Ptr<myvk::Queue> pGenericQueue;
 	{
 		auto pInstance = myvk::Instance::Create({});
-		auto pPhysicalDevice = [&pInstance] {
-			auto pPhysicalDevices = myvk::PhysicalDevice::Fetch(pInstance);
-			for (const auto &pPhysicalDevice : pPhysicalDevices) {
-				if (pPhysicalDevice->GetProperties().vk10.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
-					return pPhysicalDevice;
-			}
-			return pPhysicalDevices[0];
-		}();
-		printf("GPU: %s\n", pPhysicalDevice->GetProperties().vk10.deviceName);
+		auto pPhysicalDevice = cuperftest::SelectPhysicalDevice(pInstance);
 		auto features = pPhysicalDevice->GetDefaultFeatures();
 		VkPhysicalDeviceShaderAtomicFloatFeaturesEXT shaderAtomicFloatFeature{
 		    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT,
