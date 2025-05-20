@@ -81,4 +81,22 @@ void WriteDL_DSplatsJSON(const std::filesystem::path &filename, const CuTileRast
 	std::ofstream fout{filename};
 	fout << json.dump(4, ' ') << std::endl;
 }
+
+myvk::Ptr<myvk::PhysicalDevice> SelectPhysicalDevice(const myvk::Ptr<myvk::Instance> &pInstance) {
+	auto pPhysicalDevices = myvk::PhysicalDevice::Fetch(pInstance);
+	int cuDevice{};
+	cudaGetDevice(&cuDevice);
+	cudaDeviceProp cuDeviceProp{};
+	cudaGetDeviceProperties(&cuDeviceProp, cuDevice);
+
+	printf("CUDA Device [%d]: %s\n", cuDevice, cuDeviceProp.name);
+	for (const auto &pPhysicalDevice : pPhysicalDevices) {
+		if (strncmp((const char *)pPhysicalDevice->GetProperties().vk11.deviceUUID, cuDeviceProp.uuid.bytes,
+		            VK_UUID_SIZE) == 0)
+			return pPhysicalDevice;
+	}
+	printf("Failed to find vkPhysicalDevice identical to CUDA Device\n");
+	return nullptr;
+}
+
 } // namespace cuperftest
