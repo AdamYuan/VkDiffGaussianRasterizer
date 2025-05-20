@@ -21,6 +21,26 @@ void WriteDL_DSplatsJSON(const std::filesystem::path &filename, const CuTileRast
                          uint32_t splatCount);
 } // namespace cuperftest
 
+struct VerboseStat {
+	double cohesionRate{}, atomicAddRate{};
+	void Print(const char *prefix) const {
+		printf("%s subgroup-splat cohesion rate: %lf\n", prefix, cohesionRate);
+		printf("%s atomic-add rate: %lf\n", prefix, atomicAddRate);
+	}
+	static VerboseStat Average(auto &&range) {
+		VerboseStat stat{};
+		uint32_t count = 0;
+		for (const VerboseStat &r : range) {
+			stat.cohesionRate += r.cohesionRate;
+			stat.atomicAddRate += r.atomicAddRate;
+			++count;
+		}
+		stat.cohesionRate /= double(count);
+		stat.atomicAddRate /= double(count);
+		return stat;
+	}
+};
+
 int main(int argc, char **argv) {
 	--argc, ++argv;
 	static constexpr int kStaticArgCount = 1;
@@ -162,8 +182,7 @@ int main(int argc, char **argv) {
 	CuTileRasterizer::BwdROArgs cuTileRasterBwdROArgs{};
 	CuTileRasterizer::BwdRWArgs cuTileRasterBwdRWArgs{};
 
-	uint32_t sumCount = 0;
-	double sumCohesionRate = 0, sumAtomicAddRate = 0;
+	std::vector<VerboseStat> verbStats;
 
 	for (auto &scene : gsDataset.scenes) {
 		{
@@ -181,6 +200,8 @@ int main(int argc, char **argv) {
 		vkRasterFwdROArgs.splats = vkGsModel.GetSplatArgs();
 		vkRasterFwdROArgs.bgColor = {1.0f, 1.0f, 1.0f};
 		vkRasterBwdROArgs.fwd = vkRasterFwdROArgs;
+
+		std::vector<VerboseStat> sceneVerbStats;
 
 		for (uint32_t entryIdx = 0; auto &entry : scene.entries) {
 			printf("\n%s %d/%zu %s\n", scene.name.c_str(), entryIdx++, scene.entries.size(), entry.imageName.c_str());
@@ -223,20 +244,20 @@ int main(int argc, char **argv) {
 			vkgsraster::Rasterizer::VerboseMetrics verbose = vkRasterVerboseQuery.GetMetrics();
 			printf("fragments: %d\n", verbose.fragmentCount);
 			printf("coherent fragments: %d\n", verbose.coherentFragmentCount);
-			double cohesionRate = double(verbose.coherentFragmentCount) / double(verbose.fragmentCount);
-			printf("subgroup-splat cohesion rate: %lf\n", cohesionRate);
 			printf("atomic adds: %d\n", verbose.atomicAddCount);
-			double atomicAddRate = double(verbose.atomicAddCount) / double(verbose.fragmentCount);
-			printf("atomic-add rate: %lf\n", atomicAddRate);
-
-			sumCohesionRate += cohesionRate;
-			sumAtomicAddRate += atomicAddRate;
-			++sumCount;
+			VerboseStat entryVerbStat{
+			    .cohesionRate = double(verbose.coherentFragmentCount) / double(verbose.fragmentCount),
+			    .atomicAddRate = double(verbose.atomicAddCount) / double(verbose.fragmentCount),
+			};
+			entryVerbStat.Print("");
+			sceneVerbStats.push_back(entryVerbStat);
 		}
+		auto sceneVerbStat = VerboseStat::Average(sceneVerbStats);
+		sceneVerbStat.Print(scene.name.c_str());
+		verbStats.push_back(sceneVerbStat);
 	}
 
-	printf("avg subgroup-splat cohesion rate: %lf\n", sumCohesionRate / double(sumCount));
-	printf("avg atomic-add rate: %lf\n", sumAtomicAddRate / double(sumCount));
+	VerboseStat::Average(verbStats).Print("avg");
 
 	return 0;
 }
