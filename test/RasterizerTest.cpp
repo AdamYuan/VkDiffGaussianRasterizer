@@ -1,6 +1,8 @@
 #include "../src/Rasterizer.hpp"
 #include "GSModel.hpp"
 
+#include <array>
+#include <cmath>
 #include <myvk/FrameManager.hpp>
 #include <myvk/GLFWHelper.hpp>
 #include <myvk/ImGuiHelper.hpp>
@@ -10,12 +12,102 @@
 #include <myvk/QueueSelector.hpp>
 #include <tinyfiledialogs.h>
 
-constexpr uint32_t kFrameCount = 3, kWidth = 1280, kHeight = 720;
+#include <imgui_internal.h>
+
+constexpr uint32_t kFrameCount = 3, kMinResolution = 512, kMaxResolution = 4096;
+
+template <typename T> static T clamp(T x, T minVal, T maxVal) { return std::max(std::min(x, maxVal), minVal); }
+
+struct Config {
+	uint32_t width = 1280, height = 720;
+	bool forwardOutputImage = true;
+	bool backward = false;
+
+	bool operator==(const Config &) const = default;
+} config = {};
+
+struct Camera {
+	std::array<float, 3> position = {};
+	float focal = 720.0f;
+	float yaw = 0.0f, pitch = 0.0f;
+
+	float speed = 1.f, sensitivity = 1.f;
+
+	void Update(GLFWwindow *pWindow) {
+		speed = std::max(speed, 0.0f);
+		sensitivity = std::max(sensitivity, 0.0f);
+
+		static double prevUpdateTime = glfwGetTime();
+		double updateTime = glfwGetTime();
+		auto delta = float(updateTime - prevUpdateTime);
+		prevUpdateTime = updateTime;
+
+		float deltaSpeed = speed * delta;
+		float deltaSensitivity = sensitivity * delta;
+
+		const auto moveForward = [&](const std::array<float, 3> &dir, float coef) {
+			position[0] += dir[0] * coef * deltaSpeed;
+			position[1] += dir[1] * coef * deltaSpeed;
+			position[2] += dir[2] * coef * deltaSpeed;
+		};
+
+		static double prevCursorPosX = 0.0, prevCursorPosY = 0.0;
+		double cursorPosX, cursorPosY;
+		glfwGetCursorPos(pWindow, &cursorPosX, &cursorPosY);
+
+		if (!ImGui::GetCurrentContext()->NavWindow ||
+		    (ImGui::GetCurrentContext()->NavWindow->Flags & ImGuiWindowFlags_NoBringToFrontOnFocus)) {
+			auto lookDir = GetLookDir(), sideDir = GetSideDir();
+			if (glfwGetKey(pWindow, GLFW_KEY_W) == GLFW_PRESS)
+				moveForward(lookDir, 1.0f);
+			if (glfwGetKey(pWindow, GLFW_KEY_S) == GLFW_PRESS)
+				moveForward(lookDir, -1.0f);
+			if (glfwGetKey(pWindow, GLFW_KEY_D) == GLFW_PRESS)
+				moveForward(sideDir, 1.0f);
+			if (glfwGetKey(pWindow, GLFW_KEY_A) == GLFW_PRESS)
+				moveForward(sideDir, -1.0f);
+
+			if (glfwGetMouseButton(pWindow, GLFW_MOUSE_BUTTON_LEFT)) {
+				float offsetX = float(cursorPosX - prevCursorPosX) * deltaSensitivity;
+				float offsetY = float(cursorPosY - prevCursorPosY) * deltaSensitivity;
+				yaw -= offsetX;
+				pitch -= offsetY;
+			}
+		}
+
+		prevCursorPosX = cursorPosX, prevCursorPosY = cursorPosY;
+
+		pitch = clamp(pitch, -(float)M_PI_2, (float)M_PI_2);
+	}
+
+	std::array<float, 3> GetLookDir() const {
+		float cosYaw = std::cos(yaw), sinYaw = std::sin(yaw);
+		float cosPitch = std::cos(pitch), sinPitch = std::sin(pitch);
+		return {-cosPitch * cosYaw, -sinPitch, -cosPitch * sinYaw};
+	}
+	std::array<float, 3> GetUpDir() const {
+		float cosYaw = std::cos(yaw), sinYaw = std::sin(yaw);
+		float cosPitch = std::cos(pitch), sinPitch = std::sin(pitch);
+		return {-sinPitch * cosYaw, cosPitch, -sinPitch * sinYaw};
+	}
+	std::array<float, 3> GetSideDir() const {
+		float cosYaw = std::cos(yaw), sinYaw = std::sin(yaw);
+		return {-sinYaw, 0, cosYaw};
+	}
+	std::array<float, 9> GetViewMatrix() const {
+		auto lookDir = GetLookDir(), sideDir = GetSideDir(), upDir = GetUpDir();
+		return {
+		    sideDir[0], upDir[0], lookDir[0], //
+		    sideDir[1], upDir[1], lookDir[1], //
+		    sideDir[2], upDir[2], lookDir[2], //
+		};
+	}
+} camera = {};
 
 int main() {
 	using vkgsraster::Rasterizer;
 
-	GLFWwindow *pWindow = myvk::GLFWCreateWindow("Test", kWidth, kHeight, false);
+	GLFWwindow *pWindow = myvk::GLFWCreateWindow("Test", config.width, config.height, false);
 
 	myvk::Ptr<myvk::Device> pDevice;
 	myvk::Ptr<myvk::Queue> pGenericQueue;
@@ -23,7 +115,14 @@ int main() {
 	{
 		auto pInstance = myvk::Instance::CreateWithGlfwExtensions();
 		auto pSurface = myvk::Surface::Create(pInstance, pWindow);
-		auto pPhysicalDevice = myvk::PhysicalDevice::Fetch(pInstance)[0];
+		auto pPhysicalDevice = [&] {
+			auto pPhysicalDevices = myvk::PhysicalDevice::Fetch(pInstance);
+			for (const auto &pPhyDev : pPhysicalDevices) {
+				if (pPhyDev->GetProperties().vk10.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+					return pPhyDev;
+			}
+			return pPhysicalDevices[0];
+		}();
 		auto features = pPhysicalDevice->GetDefaultFeatures();
 		VkPhysicalDeviceShaderAtomicFloatFeaturesEXT shaderAtomicFloatFeature{
 		    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT,
@@ -87,16 +186,40 @@ int main() {
 		pFramebuffer = myvk::ImagelessFramebuffer::Create(pRenderPass, {pFrameManager->GetSwapchainImageViews()[0]});
 	});
 
-	bool forwardOutputImage = false;
-	Rasterizer rasterizer{pDevice, {.forwardOutputImage = forwardOutputImage}};
+	Rasterizer rasterizer;
 	Rasterizer::Resource rasterizerResource;
-	rasterizerResource.UpdateImage(pDevice, kWidth, kHeight, rasterizer);
-	auto pPixelBuffer = myvk::Buffer::Create(pDevice, sizeof(float) * 3 * kWidth * kHeight, 0,
-	                                         Rasterizer::GetFwdArgsUsage().outPixelBuffer);
-	auto pDL_DPixelBuffer = myvk::Buffer::Create(pDevice, sizeof(float) * 3 * kWidth * kHeight, 0,
-	                                             Rasterizer::GetBwdArgsUsage().dL_dPixelBuffer);
+	myvk::Ptr<myvk::Buffer> pPixelBuffer, pDL_DPixelBuffer;
 
-	bool backward = false;
+	const auto updateConfig = [&] {
+		static bool isFirstUpdate = true;
+		static Config prevConfig = {};
+
+		config.width = clamp(config.width, kMinResolution, kMaxResolution);
+		config.height = clamp(config.height, kMinResolution, kMaxResolution);
+
+		if (isFirstUpdate || config != prevConfig) {
+			pDevice->WaitIdle();
+
+			rasterizer = Rasterizer{pDevice, {.forwardOutputImage = config.forwardOutputImage}};
+			rasterizerResource.UpdateImage(pDevice, config.width, config.height, rasterizer);
+
+			if (config.width != prevConfig.width || config.height != prevConfig.height) {
+				glfwSetWindowSize(pWindow, (int)config.width, (int)config.height);
+				pFrameManager->Resize();
+			}
+
+			VkDeviceSize imageBufferSize = sizeof(float) * 3 * config.width * config.height;
+			if (!pPixelBuffer || pPixelBuffer->GetSize() < imageBufferSize)
+				pPixelBuffer =
+				    myvk::Buffer::Create(pDevice, imageBufferSize, 0, Rasterizer::GetFwdArgsUsage().outPixelBuffer);
+			if (!pDL_DPixelBuffer || pDL_DPixelBuffer->GetSize() < imageBufferSize)
+				pDL_DPixelBuffer =
+				    myvk::Buffer::Create(pDevice, imageBufferSize, 0, Rasterizer::GetBwdArgsUsage().dL_dPixelBuffer);
+		}
+
+		isFirstUpdate = false;
+		prevConfig = config;
+	};
 
 	VkGSModel vkGsModel{};
 	Rasterizer::SplatArgs pDL_DSplats;
@@ -115,45 +238,67 @@ int main() {
 		{
 			myvk::ImGuiNewFrame();
 
-			ImGui::Begin("Info");
-			if (ImGui::Button("Load")) {
-
+			ImGui::Begin("Controller");
+			ImGui::Text("GPU: %s", pDevice->GetPhysicalDevicePtr()->GetProperties().vk10.deviceName);
+			if (ImGui::Button("Load 3DGS")) {
 				static constexpr int kFilterCount = 1;
 				static constexpr const char *kFilterPatterns[kFilterCount] = {"*.ply"};
 				const char *filename =
-				    tinyfd_openFileDialog("Open GS Model", "", kFilterCount, kFilterPatterns, nullptr, false);
+				    tinyfd_openFileDialog("Open 3DGS Model", "", kFilterCount, kFilterPatterns, nullptr, false);
 				if (filename) {
 					pGenericQueue->WaitIdle();
-					vkGsModel =
-					    VkGSModel::Create(pGenericQueue, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, GSModel::Load(filename));
-					if (!vkGsModel.IsEmpty())
+					auto gsModel = GSModel::Load(filename);
+					if (!gsModel.IsEmpty()) {
+						vkGsModel = {};
+						vkGsModel = VkGSModel::Create(pGenericQueue, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, gsModel);
 						rasterizerResource.UpdateBuffer(pDevice, vkGsModel.splatCount);
-					pDL_DSplats =
-					    VkGSModel::Create(pDevice, Rasterizer::GetBwdArgsUsage().dL_dSplatBuffers, vkGsModel.splatCount)
-					        .GetSplatArgs();
+						pDL_DSplats = VkGSModel::Create(pDevice, Rasterizer::GetBwdArgsUsage().dL_dSplatBuffers,
+						                                vkGsModel.splatCount)
+						                  .GetSplatArgs();
+					}
 				}
 			}
-			ImGui::Checkbox("Backward", &backward);
-			if (ImGui::Checkbox("Output Image", &forwardOutputImage)) {
-				if (forwardOutputImage != rasterizer.GetConfig().forwardOutputImage) {
-					pGenericQueue->WaitIdle();
-					rasterizer = Rasterizer{pDevice, {.forwardOutputImage = forwardOutputImage}};
-					rasterizerResource.UpdateImage(pDevice, kWidth, kHeight, rasterizer);
+			ImGui::Text("3DGS Splat Count: %u", vkGsModel.splatCount);
+
+			if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::InputFloat3("Position", camera.position.data());
+				ImGui::InputFloat("Focal", &camera.focal);
+				ImGui::InputFloat("Yaw", &camera.yaw);
+				ImGui::InputFloat("Pitch", &camera.pitch);
+				ImGui::InputFloat("Speed", &camera.speed);
+				ImGui::InputFloat("Sensitivity", &camera.sensitivity);
+			}
+			if (ImGui::CollapsingHeader("Config", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::Checkbox("Backward", &config.backward);
+				ImGui::Checkbox("Output Image", &config.forwardOutputImage);
+				{
+					static int sWidthHeight[] = {(int)config.width, (int)config.height};
+					ImGui::InputInt2("Resolution", sWidthHeight);
+					sWidthHeight[0] = std::max(sWidthHeight[0], (int)kMinResolution);
+					sWidthHeight[1] = std::max(sWidthHeight[1], (int)kMinResolution);
+					if (ImGui::Button("Resize")) {
+						config.width = (uint32_t)sWidthHeight[0];
+						config.height = (uint32_t)sWidthHeight[1];
+					}
 				}
 			}
-			ImGui::Text("Splat Count: %u", vkGsModel.splatCount);
-			ImGui::Text("Forward: %lf ms", rasterizerPerfMetrics.forward);
-			ImGui::Text("Forward View: %lf ms", rasterizerPerfMetrics.forwardView);
-			ImGui::Text("Forward Sort: %lf ms", rasterizerPerfMetrics.forwardSort);
-			ImGui::Text("Forward Draw: %lf ms", rasterizerPerfMetrics.forwardDraw);
-			ImGui::Text("Backward: %lf ms", rasterizerPerfMetrics.backward);
-			ImGui::Text("Backward Reset: %lf ms", rasterizerPerfMetrics.backwardReset);
-			ImGui::Text("Backward Draw: %lf ms", rasterizerPerfMetrics.backwardDraw);
-			ImGui::Text("Backward View: %lf ms", rasterizerPerfMetrics.backwardView);
+			if (ImGui::CollapsingHeader("Performance", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::Text("Forward: %lf ms", rasterizerPerfMetrics.forward);
+				ImGui::Text("Forward View: %lf ms", rasterizerPerfMetrics.forwardView);
+				ImGui::Text("Forward Sort: %lf ms", rasterizerPerfMetrics.forwardSort);
+				ImGui::Text("Forward Draw: %lf ms", rasterizerPerfMetrics.forwardDraw);
+				ImGui::Text("Backward: %lf ms", rasterizerPerfMetrics.backward);
+				ImGui::Text("Backward Reset: %lf ms", rasterizerPerfMetrics.backwardReset);
+				ImGui::Text("Backward Draw: %lf ms", rasterizerPerfMetrics.backwardDraw);
+				ImGui::Text("Backward View: %lf ms", rasterizerPerfMetrics.backwardView);
+			}
 			ImGui::End();
 
 			ImGui::Render();
 		}
+
+		updateConfig();
+		camera.Update(pWindow);
 
 		if (pFrameManager->NewFrame()) {
 			uint32_t currentFrame = pFrameManager->GetCurrentFrame();
@@ -175,7 +320,7 @@ int main() {
 			    });
 
 			if (!vkGsModel.IsEmpty()) {
-				if (!forwardOutputImage)
+				if (!config.forwardOutputImage)
 					pCommandBuffer->CmdPipelineBarrier2(
 					    {},
 					    {pPixelBuffer->GetMemoryBarrier2(Rasterizer::GetDstFwdRWArgsSync().outPixelBuffer.GetWrite(),
@@ -185,12 +330,12 @@ int main() {
 				Rasterizer::FwdROArgs fwdROArgs = {
 				    .camera =
 				        {
-				            .width = kWidth,
-				            .height = kHeight,
-				            .focalX = float(kHeight),
-				            .focalY = float(kHeight),
-				            .viewMat = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f},
-				            .pos = {0.0f, 0.0f, 0.0f},
+				            .width = pSwapchainImage->GetExtent().width,
+				            .height = pSwapchainImage->GetExtent().height,
+				            .focalX = camera.focal,
+				            .focalY = camera.focal,
+				            .viewMat = camera.GetViewMatrix(),
+				            .pos = camera.position,
 				        },
 				    .splatCount = vkGsModel.splatCount,
 				    .splats = vkGsModel.GetSplatArgs(),
@@ -203,7 +348,7 @@ int main() {
 				                      },
 				                      rasterizerResource, rasterizerPerfQuery);
 
-				if (backward) {
+				if (config.backward) {
 					pCommandBuffer->CmdPipelineBarrier2(
 					    {},
 					    {
