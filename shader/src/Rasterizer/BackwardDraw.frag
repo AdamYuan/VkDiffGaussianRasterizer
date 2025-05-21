@@ -64,11 +64,6 @@ void main() {
 	if (subgroupQuadAll(pixelDiscard))
 		return;
 
-	vec3 dL_dPixel = subpassLoad(gDL_DPixels).xyz;
-
-	vec3 dL_dColor = dL_dPixel * (alpha * T_i);
-	float dL_dAlpha = dot(dL_dPixel, gIn.color * T_i - pixel_i) / oneMinusAlpha;
-
 	SplatViewGeom splatViewGeom;
 	splatViewGeom.conic = gIn.conic;
 	splatViewGeom.mean2D = gIn.mean2D;
@@ -81,6 +76,9 @@ void main() {
 	if (pixelDiscard)
 		dL_dSplatView = zeroDL_DSplatView();
 	else {
+		vec3 dL_dPixel = subpassLoad(gDL_DPixels).xyz;
+		vec3 dL_dColor = dL_dPixel * (alpha * T_i);
+		float dL_dAlpha = dot(dL_dPixel, gIn.color * T_i - pixel_i) / oneMinusAlpha;
 		dL_dSplatView.color = dL_dColor;
 		dL_dSplatView.geom = bwd_splatViewGeom2alpha(splatViewGeom, gl_FragCoord.xy, camera, G, dL_dAlpha);
 	}
