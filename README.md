@@ -23,9 +23,9 @@ Same as other `CMake` projects.
 
 ### Dependencies
 
-- `glslc`: GLSL compiler (included in VulkanSDK).
-- `cuda`: For `PerformanceTest` (Optional).
 - A C++ compiler supporting C++20.
+- `glslc`: GLSL compiler (included in VulkanSDK).
+- `cuda`: For running tile-based rasterizers in `PerformanceTest` (Optional).
 
 ## How to Run
 
