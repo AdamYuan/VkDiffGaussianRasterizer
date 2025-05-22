@@ -44,16 +44,7 @@ struct RMSE {
 			return RMSE{.sum = sum, .count = (uint64_t)y.size()};
 		}
 	};
-
-	RMSE &operator+=(const RMSE &rRMSE) {
-		sum += rRMSE.sum;
-		count += rRMSE.count;
-		return *this;
-	}
-
-	void Print(const char *prefix = "") const {
-		printf("%sRMSE = %lf, count = %lu\n", prefix, std::sqrt(sum / double(count)), count);
-	}
+	double GetError() const { return std::sqrt(sum / double(count)); }
 };
 
 struct MRERange {
@@ -83,28 +74,54 @@ template <MRERange... Ranges_V> struct MRE {
 			return MRE{.errors = sums, .counts = counts};
 		}
 	};
-
-	MRE &operator+=(const MRE &rMRE) {
-		for (uint32_t r = 0; r < kRangeCount; ++r) {
-			errors[r] += rMRE.errors[r];
-			counts[r] += rMRE.counts[r];
-		}
-		return *this;
-	}
-
-	void Print(const char *prefix = "") const {
-		for (uint32_t r = 0; r < kRangeCount; ++r) {
-			printf("%sMRE [%f, %f) = %lf, count = %lu\n", prefix, kRanges[r].yMin, kRanges[r].yMax,
-			       errors[r] / double(counts[r]), counts[r]);
-		}
+	std::array<double, kRangeCount> GetErrors() const {
+		std::array<double, kRangeCount> err;
+		for (uint32_t r = 0; r < kRangeCount; ++r)
+			err[r] = std::sqrt(errors[r] / double(counts[r]));
+		return err;
 	}
 };
 
-using TestMRE = MRE<                                    //
-    MRERange{10.0f, std::numeric_limits<float>::max()}, //
-    MRERange{0.1f, 10.0f},                              //
-    MRERange{1e-3f, 0.1f}                               //
-    >;
+struct ErrorStat {
+	using TestMRE = MRE<                                    //
+	    MRERange{10.0f, std::numeric_limits<float>::max()}, //
+	    MRERange{0.1f, 10.0f},                              //
+	    MRERange{1e-3f, 0.1f}                               //
+	    >;
+
+	double rmse;
+	std::array<double, TestMRE::kRangeCount> mres;
+
+	struct Func {
+		ErrorStat operator()(std::span<const float> y, std::span<const float> yHat) const {
+			return {
+			    .rmse = RMSE::Func{}(y, yHat).GetError(),
+			    .mres = TestMRE::Func{}(y, yHat).GetErrors(),
+			};
+		}
+	};
+
+	void Print(const char *prefix = "") const {
+		printf("%s RMSE = %lf\n", prefix, rmse);
+		for (uint32_t r = 0; r < TestMRE::kRangeCount; ++r)
+			printf("%s MRE [%f, %f) = %lf\n", prefix, TestMRE::kRanges[r].yMin, TestMRE::kRanges[r].yMax, mres[r]);
+	}
+
+	static ErrorStat Average(auto &&range) {
+		ErrorStat errStat = {};
+		uint32_t count = 0;
+		for (const ErrorStat &r : range) {
+			errStat.rmse += r.rmse;
+			for (uint32_t i = 0; i < TestMRE::kRangeCount; ++i)
+				errStat.mres[i] += r.mres[i];
+			++count;
+		}
+		errStat.rmse /= double(count);
+		for (uint32_t i = 0; i < TestMRE::kRangeCount; ++i)
+			errStat.mres[i] /= double(count);
+		return errStat;
+	}
+};
 
 int main(int argc, char **argv) {
 	--argc, ++argv;
@@ -260,8 +277,7 @@ int main(int argc, char **argv) {
 	CuTileRasterizer::BwdROArgs cuTileRasterBwdROArgs{};
 	CuTileRasterizer::BwdRWArgs cuTileRasterBwdRWArgs{};
 
-	auto sumMRE = TestMRE{};
-	auto sumRMSE = RMSE{};
+	std::vector<ErrorStat> errorStats;
 
 	for (auto &scene : gsDataset.scenes) {
 		{
@@ -290,6 +306,8 @@ int main(int argc, char **argv) {
 		};
 		vkF32RasterFwdROArgs.bgColor = {1.0f, 1.0f, 1.0f};
 		vkF32RasterBwdROArgs.fwd = vkF32RasterFwdROArgs;
+
+		std::vector<ErrorStat> sceneErrorStats;
 
 		for (uint32_t entryIdx = 0; auto &entry : scene.entries) {
 			printf("\n%s %d/%zu %s\n", scene.name.c_str(), entryIdx++, scene.entries.size(), entry.imageName.c_str());
@@ -358,18 +376,18 @@ int main(int argc, char **argv) {
 				vkF32RasterGradient.Update(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
 			}
 
-			TestMRE mre = vkF32RasterGradient.GetError(vkRasterGradient, TestMRE::Func{});
-			RMSE rmse = vkF32RasterGradient.GetError(vkRasterGradient, RMSE::Func{});
-			mre.Print();
-			rmse.Print();
+			auto entryErrorStat = vkF32RasterGradient.GetError(vkRasterGradient, ErrorStat::Func{});
+			entryErrorStat.Print("");
 
-			sumMRE += mre;
-			sumRMSE += rmse;
+			sceneErrorStats.push_back(entryErrorStat);
 		}
+
+		auto sceneErrorStat = ErrorStat::Average(sceneErrorStats);
+		sceneErrorStat.Print(scene.name.c_str());
+		errorStats.push_back(sceneErrorStat);
 	}
 
-	sumMRE.Print("avg ");
-	sumRMSE.Print("avg ");
+	ErrorStat::Average(errorStats).Print("avg");
 
 	return 0;
 }
