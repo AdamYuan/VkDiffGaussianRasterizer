@@ -329,7 +329,7 @@ SplatView quadReduceDL_DSplatView(SplatView dL_dSplatView) {
  * DEALINGS IN THE SOFTWARE.
  */
 
-// Divide the 2D-Dispatch_Grid into tiles of dimension [N, DipatchGridDim.y]
+// Divide the 2D-Dispatch_Grid into tiles of dimension [N, DispatchGridDim.y]
 // “CTA” (Cooperative Thread Array) == Thread Group in DirectX terminology
 struct VGroupThreadID {
 	uvec2 groupID;

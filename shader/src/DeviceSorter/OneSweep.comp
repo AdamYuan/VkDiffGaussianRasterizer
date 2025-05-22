@@ -264,7 +264,7 @@ void main() {
 
 	SortKey keys[SORT_KEYS_PER_THREAD] = loadKeys(0xFFFFFFFF);
 
-	// Count group hist eariler to reduce blocking of decoupled look-back as described in
+	// Count group hist earlier to reduce blocking of decoupled look-back as described in
 	// https://developer.download.nvidia.com/video/gputechconf/gtc/2020/presentations/s21572-a-faster-radix-sort-implementation.pdf
 	uint groupHist = countGroupHist(keys);
 	// Set FLAG_REDUCTION and data to next partition(group), for decoupled look-back
