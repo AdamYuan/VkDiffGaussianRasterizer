@@ -1,0 +1,4 @@
+build/
+models/
+**/*.inl
+shader/include/shader/**/Size.hpp

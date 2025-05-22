@@ -14,7 +14,7 @@ uint getSortPartCount() { return divCeil(gKeyCount, SORT_PART_SIZE); }
 uint extractKeyRadix(SortKey key, uint radixShift) { return uint((key >> radixShift) & (RADIX - 1)); }
 
 // Decoupled look-back flags
-#define FLAG_NOT_READY 0 // Flag value inidicating neither inclusive sum, nor reduction of a partition tile is ready
+#define FLAG_NOT_READY 0 // Flag value indicating neither inclusive sum, nor reduction of a partition tile is ready
 #define FLAG_REDUCTION 1 // Flag value indicating reduction of a partition tile is ready
 #define FLAG_INCLUSIVE 2 // Flag value indicating inclusive sum of a partition tile is ready
 #define FLAG_MASK 3      // Mask used to retrieve flag values

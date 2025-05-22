@@ -48,7 +48,7 @@ void main() {
 	groupMemoryBarrier();
 
 	if (groupThreadIdx < RADIX - 1) {
-		// ` < RADIX - 1` since the last radix is useless after exculsive prefix-sum
+		// ` < RADIX - 1` since the last radix is useless after exclusive prefix-sum
 		[[unroll]] for (uint passIdx = 0; passIdx < PASS_COUNT; ++passIdx) {
 			uint passHist = SHARED_PASS_HIST(passIdx, groupThreadIdx);
 
