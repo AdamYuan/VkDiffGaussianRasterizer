@@ -7,8 +7,8 @@
 #define CUTILERASTERIZER_HPP
 
 #include "../src/Rasterizer.hpp"
-#include <rasterizer.h>
 #include <array>
+#include <rasterizer.h>
 
 struct CuTileRasterizer {
 	struct Resource {
@@ -73,10 +73,10 @@ struct CuTileRasterizer {
 	};
 
 	static void Forward(const FwdROArgs &roArgs, const FwdRWArgs &rwArgs, Resource &resource,
-	                    const PerfQuery &perfQuery = PerfQuery{});
+	                    const PerfQuery &perfQuery = PerfQuery{}, bool allocOnly = false);
 
 	static void Backward(const BwdROArgs &roArgs, const BwdRWArgs &rwArgs, Resource &resource,
-	                     const PerfQuery &perfQuery = PerfQuery{});
+	                     const PerfQuery &perfQuery = PerfQuery{}, bool allocOnly = false);
 };
 
 #endif

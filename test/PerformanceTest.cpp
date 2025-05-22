@@ -339,12 +339,12 @@ int main(int argc, char **argv) {
 					pCommandPool->Reset();
 					pFence->Reset();
 				};
-				runVkCommand([&] {
-					vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource);
+				/* runVkCommand([&] {
+				    vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource);
 				});
 				runVkCommand([&] {
-					vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource);
-				});
+				    vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource);
+				}); */
 				runVkCommand([&] {
 					vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource,
 					                        vkRasterPerfQuery);
@@ -367,8 +367,10 @@ int main(int argc, char **argv) {
 			// Cuda
 			CuTileRasterizer::PerfMetrics cuTileRasterPerfMetrics{};
 			if (!noCu) {
-				CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource);
-				CuTileRasterizer::Backward(cuTileRasterBwdROArgs, cuTileRasterBwdRWArgs, cuTileRasterResource);
+				// Alloc-only CuTileRasterizer runs to bypass resource allocation in performance test
+				CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource, {}, true);
+				CuTileRasterizer::Backward(cuTileRasterBwdROArgs, cuTileRasterBwdRWArgs, cuTileRasterResource, {},
+				                           true);
 
 				CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource,
 				                          cuTileRasterPerfQuery);

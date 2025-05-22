@@ -150,7 +150,7 @@ void CuTileRasterizer::BwdRWArgs::Update(const vkgsraster::Rasterizer::BwdRWArgs
 }
 
 void CuTileRasterizer::Forward(const FwdROArgs &roArgs, const FwdRWArgs &rwArgs, Resource &resource,
-                               const PerfQuery &perfQuery) {
+                               const PerfQuery &perfQuery, bool allocOnly) {
 
 	cudaDeviceSynchronize();
 
@@ -161,13 +161,13 @@ void CuTileRasterizer::Forward(const FwdROArgs &roArgs, const FwdRWArgs &rwArgs,
 	    GSModel::kSHSize, roArgs.bgColor, roArgs.camera.width, roArgs.camera.height, roArgs.splats.means,
 	    roArgs.splats.shs, nullptr, roArgs.splats.opacities, roArgs.splats.scales, 1.0f, roArgs.splats.rotates, nullptr,
 	    roArgs.camera.viewMat, roArgs.camera.projMat, roArgs.camera.pos, roArgs.camera.tanFovX, roArgs.camera.tanFovY,
-	    false, rwArgs.outPixels, nullptr, false, perfQuery);
+	    false, rwArgs.outPixels, nullptr, false, perfQuery, allocOnly);
 
 	cudaDeviceSynchronize();
 }
 
 void CuTileRasterizer::Backward(const BwdROArgs &roArgs, const BwdRWArgs &rwArgs, Resource &resource,
-                                const PerfQuery &perfQuery) {
+                                const PerfQuery &perfQuery, bool allocOnly) {
 	/* torch::Tensor dL_dmeans2D = torch::zeros({P, 3}, means3D.options());
 	torch::Tensor dL_dcolors = torch::zeros({P, NUM_CHANNELS}, means3D.options());
 	torch::Tensor dL_dconic = torch::zeros({P, 2, 2}, means3D.options());
@@ -180,6 +180,9 @@ void CuTileRasterizer::Backward(const BwdROArgs &roArgs, const BwdRWArgs &rwArgs
 	uint32_t dL_count = dL_dmean2D_count + dL_dcolor_count + dL_dconic_count + dL_dcov3D_count;
 
 	auto dL = reinterpret_cast<float *>(resource.dLBuffer.Update(dL_count * sizeof(float)));
+
+	if (allocOnly)
+		return;
 
 	cudaDeviceSynchronize();
 
