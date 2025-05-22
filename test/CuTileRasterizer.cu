@@ -28,6 +28,13 @@ char *CuTileRasterizer::Resource::ResizeableBuffer::Update(std::size_t updateSiz
 	}
 	return data;
 }
+char *CuTileRasterizer::Resource::VirtualResizeableBuffer::Update(std::size_t updateSize) {
+	if (updateSize > size) {
+		printf("Virtual CuBuffer::Update %zu -> %zu\n", size, updateSize);
+		size = updateSize;
+	}
+	return data;
+}
 
 void CuTileRasterizer::CameraArgs::Update(const vkgsraster::Rasterizer::CameraArgs &vkCamera) {
 	width = (int)vkCamera.width;
@@ -151,9 +158,6 @@ void CuTileRasterizer::BwdRWArgs::Update(const vkgsraster::Rasterizer::BwdRWArgs
 
 void CuTileRasterizer::Forward(const FwdROArgs &roArgs, const FwdRWArgs &rwArgs, Resource &resource,
                                const PerfQuery &perfQuery) {
-
-	cudaDeviceSynchronize();
-
 	resource.numRendered = CudaRasterizer::Rasterizer::forward(
 	    [&](std::size_t size) { return resource.geometryBuffer.Update(size); },
 	    [&](std::size_t size) { return resource.binningBuffer.Update(size); },
@@ -162,8 +166,6 @@ void CuTileRasterizer::Forward(const FwdROArgs &roArgs, const FwdRWArgs &rwArgs,
 	    roArgs.splats.shs, nullptr, roArgs.splats.opacities, roArgs.splats.scales, 1.0f, roArgs.splats.rotates, nullptr,
 	    roArgs.camera.viewMat, roArgs.camera.projMat, roArgs.camera.pos, roArgs.camera.tanFovX, roArgs.camera.tanFovY,
 	    false, rwArgs.outPixels, nullptr, false, perfQuery);
-
-	cudaDeviceSynchronize();
 }
 
 void CuTileRasterizer::Backward(const BwdROArgs &roArgs, const BwdRWArgs &rwArgs, Resource &resource,
@@ -180,24 +182,4 @@ void CuTileRasterizer::Backward(const BwdROArgs &roArgs, const BwdRWArgs &rwArgs
 	uint32_t dL_count = dL_dmean2D_count + dL_dcolor_count + dL_dconic_count + dL_dcov3D_count;
 
 	auto dL = reinterpret_cast<float *>(resource.dLBuffer.Update(dL_count * sizeof(float)));
-
-	cudaDeviceSynchronize();
-
-	cudaMemset(dL, 0, dL_count * sizeof(float));
-
-	float *dL_dmean2Ds = dL;
-	float *dL_dcolors = dL_dmean2Ds + dL_dmean2D_count;
-	float *dL_dconics = dL_dcolors + dL_dcolor_count;
-	float *dL_dcov3D = dL_dconics + dL_dconic_count;
-
-	CudaRasterizer::Rasterizer::backward(
-	    (int)roArgs.fwd.splatCount, GSModel::kSHDegree, GSModel::kSHSize, resource.numRendered, roArgs.fwd.bgColor,
-	    roArgs.fwd.camera.width, roArgs.fwd.camera.height, roArgs.fwd.splats.means, roArgs.fwd.splats.shs, nullptr,
-	    roArgs.fwd.splats.scales, 1.0f, roArgs.fwd.splats.rotates, nullptr, roArgs.fwd.camera.viewMat,
-	    roArgs.fwd.camera.projMat, roArgs.fwd.camera.pos, roArgs.fwd.camera.tanFovX, roArgs.fwd.camera.tanFovY, nullptr,
-	    resource.geometryBuffer.data, resource.binningBuffer.data, resource.imageBuffer.data, roArgs.dL_dPixels,
-	    dL_dmean2Ds, dL_dconics, rwArgs.dL_dSplats.opacities, dL_dcolors, rwArgs.dL_dSplats.means, dL_dcov3D,
-	    rwArgs.dL_dSplats.shs, rwArgs.dL_dSplats.scales, rwArgs.dL_dSplats.rotates, false, perfQuery);
-
-	cudaDeviceSynchronize();
 }

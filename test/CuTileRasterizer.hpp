@@ -18,7 +18,14 @@ struct CuTileRasterizer {
 
 			char *Update(std::size_t updateSize);
 		};
-		ResizeableBuffer geometryBuffer{}, binningBuffer{}, imageBuffer{}, dLBuffer{};
+		struct VirtualResizeableBuffer {
+			std::size_t size{};
+			char *data{};
+
+			char *Update(std::size_t updateSize);
+		};
+		ResizeableBuffer geometryBuffer{};
+		VirtualResizeableBuffer binningBuffer{}, imageBuffer{}, dLBuffer{};
 
 		int numRendered{};
 	};

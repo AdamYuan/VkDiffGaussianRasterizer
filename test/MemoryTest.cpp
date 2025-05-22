@@ -85,65 +85,12 @@ struct MemStat {
 	}
 };
 
-struct PerfStat {
-	double cuForward = 0, vkForward = 0, cuBackward = 0, vkBackward = 0;
-	double cuForwardDraw = 0, vkForwardDraw = 0, cuBackwardDraw = 0, vkBackwardDraw = 0;
-
-	void Print(const char *prefix) const {
-		printf("%s vk_forward: %lf ms\n", prefix, vkForward);
-		printf("%s vk_forward draw: %lf ms\n", prefix, vkForwardDraw);
-		printf("%s vk_backward: %lf ms\n", prefix, vkBackward);
-		printf("%s vk_backward draw: %lf ms\n", prefix, vkBackwardDraw);
-		printf("%s vk: %lf ms\n", prefix, (vkForward + vkBackward));
-		printf("%s vk draw: %lf ms\n", prefix, (vkForwardDraw + vkBackwardDraw));
-
-		printf("%s cu_forward: %lf ms\n", prefix, cuForward);
-		printf("%s cu_forward draw: %lf ms\n", prefix, cuForwardDraw);
-		printf("%s cu_backward: %lf ms\n", prefix, cuBackward);
-		printf("%s cu_backward draw: %lf ms\n", prefix, cuBackwardDraw);
-		printf("%s cu: %lf ms\n", prefix, (cuForward + cuBackward));
-		printf("%s cu draw: %lf ms\n", prefix, (cuForwardDraw + cuBackwardDraw));
-
-		printf("%s speedup_forward: %lf\n", prefix, cuForward / vkForward);
-		printf("%s speedup_forward draw: %lf\n", prefix, cuForwardDraw / vkForwardDraw);
-		printf("%s speedup_backward: %lf\n", prefix, cuBackward / vkBackward);
-		printf("%s speedup_backward draw: %lf\n", prefix, cuBackwardDraw / vkBackwardDraw);
-		printf("%s speedup: %lf\n", prefix, (cuForward + cuBackward) / (vkForward + vkBackward));
-		printf("%s speedup draw: %lf\n", prefix, (cuForwardDraw + cuBackwardDraw) / (vkForwardDraw + vkBackwardDraw));
-	}
-
-	static PerfStat Average(auto &&range) {
-		PerfStat stat{};
-		uint32_t count = 0;
-		for (const PerfStat &r : range) {
-			stat.cuForward += r.cuForward;
-			stat.vkForward += r.vkForward;
-			stat.cuBackward += r.cuBackward;
-			stat.vkBackward += r.vkBackward;
-			stat.cuForwardDraw += r.cuForwardDraw;
-			stat.vkForwardDraw += r.vkForwardDraw;
-			stat.cuBackwardDraw += r.cuBackwardDraw;
-			stat.vkBackwardDraw += r.vkBackwardDraw;
-			++count;
-		}
-		stat.cuForward /= double(count);
-		stat.vkForward /= double(count);
-		stat.cuBackward /= double(count);
-		stat.vkBackward /= double(count);
-		stat.cuForwardDraw /= double(count);
-		stat.vkForwardDraw /= double(count);
-		stat.cuBackwardDraw /= double(count);
-		stat.vkBackwardDraw /= double(count);
-		return stat;
-	}
-};
-
 int main(int argc, char **argv) {
 	--argc, ++argv;
 	static constexpr int kStaticArgCount = 1;
 	static constexpr const char *kHelpString =
 	    "./PerformanceTest [dataset] (-w=[width]) (-h=[height]) (-i=[model "
-	    "iteration]) (-e=[entries per scene]) (-c=[crop ratio]) (-w: write result) (-s: single) (-nocu) (-novk)\n";
+	    "iteration]) (-e=[entries per scene]) (-c=[crop ratio]) (-s: single) (-nocu) (-novk)\n";
 	if (argc < kStaticArgCount) {
 		printf(kHelpString);
 		return EXIT_FAILURE;
@@ -153,7 +100,6 @@ int main(int argc, char **argv) {
 	uint32_t resizeWidth = 0, resizeHeight = 0;
 	uint32_t entriesPerScene = 0;
 	float cropRatio = 0.0f;
-	bool writeResult = false;
 	bool single = false;
 	bool noCu = false, noVk = false;
 	for (int i = kStaticArgCount; i < argc; ++i) {
@@ -169,9 +115,7 @@ int main(int argc, char **argv) {
 			return true;
 		};
 
-		if (arg == "-w")
-			writeResult = true;
-		else if (arg == "-s")
+		if (arg == "-s")
 			single = true;
 		else if (arg == "-nocu")
 			noCu = true;
@@ -291,10 +235,8 @@ int main(int argc, char **argv) {
 	CuTileRasterizer::FwdRWArgs cuTileRasterFwdRWArgs{};
 	CuTileRasterizer::BwdROArgs cuTileRasterBwdROArgs{};
 	CuTileRasterizer::BwdRWArgs cuTileRasterBwdRWArgs{};
-	auto cuTileRasterPerfQuery = CuTileRasterizer::PerfQuery::Create();
 
 	std::size_t vkAllMem{};
-	std::vector<PerfStat> perfStats;
 
 	for (auto &scene : gsDataset.scenes) {
 		{
@@ -313,8 +255,6 @@ int main(int argc, char **argv) {
 		vkRasterFwdROArgs.bgColor = {1.0f, 1.0f, 1.0f};
 		vkRasterBwdROArgs.fwd = vkRasterFwdROArgs;
 
-		std::vector<PerfStat> scenePerfStats;
-
 		for (uint32_t entryIdx = 0; auto &entry : scene.entries) {
 			printf("\n%s %d/%zu %s\n", scene.name.c_str(), entryIdx++, scene.entries.size(), entry.imageName.c_str());
 			vkRasterFwdROArgs.camera = entry.camera;
@@ -324,88 +264,22 @@ int main(int argc, char **argv) {
 			cuTileRasterFwdRWArgs.Update(vkRasterFwdRWArgs);
 			cuTileRasterBwdROArgs.Update(cuTileRasterFwdROArgs, vkRasterBwdROArgs);
 			cuTileRasterBwdRWArgs.Update(vkRasterBwdRWArgs);
-			float *cuOutPixels = cuTileRasterFwdRWArgs.outPixels;
+			// float *cuOutPixels = cuTileRasterFwdRWArgs.outPixels;
 
 			// Vulkan
-			vkgsraster::Rasterizer::PerfMetrics vkRasterPerfMetrics{};
 			if (!noVk) {
 				vkRasterResource.UpdateImage(pDevice, entry.camera.width, entry.camera.height, vkRasterizer);
-				const auto runVkCommand = [&](auto &&cmdRun) {
-					pCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-					cmdRun();
-					pCommandBuffer->End();
-					pCommandBuffer->Submit(pFence);
-					pFence->Wait();
-					pCommandPool->Reset();
-					pFence->Reset();
-				};
-				runVkCommand([&] {
-					vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource);
-				});
-				runVkCommand([&] {
-					vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource);
-				});
-				runVkCommand([&] {
-					vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource,
-					                        vkRasterPerfQuery);
-				});
-				cuperftest::ClearDL_DSplats(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
-				runVkCommand([&] {
-					vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource,
-					                         vkRasterPerfQuery);
-				});
-
-				if (writeResult) {
-					cuperftest::WritePixelsPNG(entry.imageName + "_vk.png", cuOutPixels, entry.camera.width,
-					                           entry.camera.height);
-					cuperftest::WriteDL_DSplatsJSON(entry.imageName + "_vk.json", cuTileRasterBwdRWArgs.dL_dSplats,
-					                                std::min(vkGsModel.splatCount, kMaxWriteSplatCount));
-				}
-				vkRasterPerfMetrics = vkRasterPerfQuery.GetMetrics();
 			}
 
 			// Cuda
-			CuTileRasterizer::PerfMetrics cuTileRasterPerfMetrics{};
 			if (!noCu) {
 				CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource);
 				CuTileRasterizer::Backward(cuTileRasterBwdROArgs, cuTileRasterBwdRWArgs, cuTileRasterResource);
-
-				CuTileRasterizer::Forward(cuTileRasterFwdROArgs, cuTileRasterFwdRWArgs, cuTileRasterResource,
-				                          cuTileRasterPerfQuery);
-				cuperftest::ClearDL_DSplats(cuTileRasterBwdRWArgs.dL_dSplats, vkGsModel.splatCount);
-				CuTileRasterizer::Backward(cuTileRasterBwdROArgs, cuTileRasterBwdRWArgs, cuTileRasterResource,
-				                           cuTileRasterPerfQuery);
-				if (writeResult) {
-					cuperftest::WritePixelsPNG(entry.imageName + "_cu.png", cuOutPixels, entry.camera.width,
-					                           entry.camera.height);
-					cuperftest::WriteDL_DSplatsJSON(entry.imageName + "_cu.json", cuTileRasterBwdRWArgs.dL_dSplats,
-					                                std::min(vkGsModel.splatCount, kMaxWriteSplatCount));
-				}
-				cuTileRasterPerfMetrics = cuTileRasterPerfQuery.GetMetrics();
 			}
-
-			PerfStat entryPerfStat{
-			    .cuForward = cuTileRasterPerfMetrics.forward,
-			    .vkForward = vkRasterPerfMetrics.forward,
-			    .cuBackward = cuTileRasterPerfMetrics.backward,
-			    .vkBackward = vkRasterPerfMetrics.backward,
-			    .cuForwardDraw = cuTileRasterPerfMetrics.forwardDraw,
-			    .vkForwardDraw = vkRasterPerfMetrics.forwardDraw,
-			    .cuBackwardDraw = cuTileRasterPerfMetrics.backwardDraw,
-			    .vkBackwardDraw = vkRasterPerfMetrics.backwardDraw,
-			};
-			entryPerfStat.Print("");
-			scenePerfStats.push_back(entryPerfStat);
 
 			vkAllMem = std::max(vkAllMem, MemStat::From(vkRasterResource).allMem);
 		}
-
-		auto scenePerfStat = PerfStat::Average(scenePerfStats);
-		scenePerfStat.Print(scene.name.c_str());
-		perfStats.push_back(scenePerfStat);
 	}
-
-	PerfStat::Average(perfStats).Print("avg");
 
 	MemStat::From(cuTileRasterResource).Print("cu");
 	auto vkMemStat = MemStat::From(vkRasterResource);
