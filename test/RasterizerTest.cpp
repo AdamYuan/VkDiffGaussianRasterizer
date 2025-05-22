@@ -27,6 +27,8 @@ struct Config {
 } config = {};
 
 struct Camera {
+	static constexpr const char *kHelperString = "Move: WASD, Rotate: Drag";
+
 	std::array<float, 3> position = {};
 	float focal = 720.0f;
 	float yaw = 0.0f, pitch = 0.0f;
@@ -70,8 +72,8 @@ struct Camera {
 			if (glfwGetMouseButton(pWindow, GLFW_MOUSE_BUTTON_LEFT)) {
 				float offsetX = float(cursorPosX - prevCursorPosX) * deltaSensitivity;
 				float offsetY = float(cursorPosY - prevCursorPosY) * deltaSensitivity;
-				yaw -= offsetX;
-				pitch -= offsetY;
+				yaw += offsetX;
+				pitch += offsetY;
 			}
 		}
 
@@ -83,16 +85,16 @@ struct Camera {
 	std::array<float, 3> GetLookDir() const {
 		float cosYaw = std::cos(yaw), sinYaw = std::sin(yaw);
 		float cosPitch = std::cos(pitch), sinPitch = std::sin(pitch);
-		return {-cosPitch * cosYaw, -sinPitch, -cosPitch * sinYaw};
+		return {cosPitch * sinYaw, sinPitch, cosPitch * cosYaw};
 	}
 	std::array<float, 3> GetUpDir() const {
 		float cosYaw = std::cos(yaw), sinYaw = std::sin(yaw);
 		float cosPitch = std::cos(pitch), sinPitch = std::sin(pitch);
-		return {-sinPitch * cosYaw, cosPitch, -sinPitch * sinYaw};
+		return {-sinPitch * sinYaw, cosPitch, -sinPitch * cosYaw};
 	}
 	std::array<float, 3> GetSideDir() const {
 		float cosYaw = std::cos(yaw), sinYaw = std::sin(yaw);
-		return {-sinYaw, 0, cosYaw};
+		return {cosYaw, 0, -sinYaw};
 	}
 	std::array<float, 9> GetViewMatrix() const {
 		auto lookDir = GetLookDir(), sideDir = GetSideDir(), upDir = GetUpDir();
@@ -265,8 +267,9 @@ int main() {
 				ImGui::InputFloat("Focal", &camera.focal);
 				ImGui::InputFloat("Yaw", &camera.yaw);
 				ImGui::InputFloat("Pitch", &camera.pitch);
-				ImGui::InputFloat("Speed", &camera.speed);
-				ImGui::InputFloat("Sensitivity", &camera.sensitivity);
+				ImGui::Text(Camera::kHelperString);
+				ImGui::InputFloat("Move Speed", &camera.speed);
+				ImGui::InputFloat("Drag Sensitivity", &camera.sensitivity);
 			}
 			if (ImGui::CollapsingHeader("Config", ImGuiTreeNodeFlags_DefaultOpen)) {
 				ImGui::Checkbox("Backward", &config.backward);
@@ -319,7 +322,10 @@ int main() {
 			                                           Rasterizer::GetSrcFwdRWArgsSync().outPixelImage),
 			    });
 
-			if (!vkGsModel.IsEmpty()) {
+			if (!vkGsModel.IsEmpty() && //
+			    config.width == pSwapchainImage->GetExtent().width &&
+			    config.height == pSwapchainImage->GetExtent().height) {
+
 				if (!config.forwardOutputImage)
 					pCommandBuffer->CmdPipelineBarrier2(
 					    {},
@@ -330,8 +336,8 @@ int main() {
 				Rasterizer::FwdROArgs fwdROArgs = {
 				    .camera =
 				        {
-				            .width = pSwapchainImage->GetExtent().width,
-				            .height = pSwapchainImage->GetExtent().height,
+				            .width = config.width,
+				            .height = config.height,
 				            .focalX = camera.focal,
 				            .focalY = camera.focal,
 				            .viewMat = camera.GetViewMatrix(),
