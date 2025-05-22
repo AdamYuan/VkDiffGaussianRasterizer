@@ -77,7 +77,7 @@ template <MRERange... Ranges_V> struct MRE {
 	std::array<double, kRangeCount> GetErrors() const {
 		std::array<double, kRangeCount> err;
 		for (uint32_t r = 0; r < kRangeCount; ++r)
-			err[r] = std::sqrt(errors[r] / double(counts[r]));
+			err[r] = errors[r] / double(counts[r]);
 		return err;
 	}
 };
