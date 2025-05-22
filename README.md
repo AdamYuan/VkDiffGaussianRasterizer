@@ -29,8 +29,8 @@ Same as other `CMake` projects.
 
 ## How to Run
 
-Download the [pre-trained 3DGS models (14 GB)](https://github.com/graphdeco-inria/gaussian-splatting)
-at https://github.com/graphdeco-inria/gaussian-splatting.
+Download the [pre-trained 3DGS models (14 GB)](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/datasets/pretrained/models.zip)
+at [graphdeco-inria/gaussian-splatting](https://github.com/graphdeco-inria/gaussian-splatting).
 
 ### Configurations
 
