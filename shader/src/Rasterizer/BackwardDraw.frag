@@ -90,7 +90,8 @@ void main() {
 	if (subgroupAllEqual(gIn.sortIdx) && subgroupBallotBitCount(subgroupReduceMask) >= BALANCING_THRESHOLD) {
 		dL_dSplatView = subgroupReduceDL_DSplatView(dL_dSplatView);
 	} else {
-		subgroupReduceMask &= gl_SubgroupEqMask;
+		// subgroupReduceMask &= gl_SubgroupEqMask;
+		subgroupReduceMask = mix(gl_SubgroupEqMask, uvec4(0), bvec4(pixelDiscard));
 		subgroupReduceMask |= subgroupQuadSwapHorizontal(subgroupReduceMask);
 		subgroupReduceMask |= subgroupQuadSwapVertical(subgroupReduceMask);
 		dL_dSplatView = quadReduceDL_DSplatView(dL_dSplatView);
