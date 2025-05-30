@@ -345,6 +345,7 @@ int main(int argc, char **argv) {
 				runVkCommand([&] {
 				    vkRasterizer.CmdBackward(pCommandBuffer, vkRasterBwdROArgs, vkRasterBwdRWArgs, vkRasterResource);
 				}); */
+				vkRasterPerfQuery.Reset();
 				runVkCommand([&] {
 					vkRasterizer.CmdForward(pCommandBuffer, vkRasterFwdROArgs, vkRasterFwdRWArgs, vkRasterResource,
 					                        vkRasterPerfQuery);
