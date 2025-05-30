@@ -47,6 +47,7 @@ struct VkGSModel {
 	void CopyFrom(const myvk::Ptr<myvk::Queue> &pQueue, const GSModel &model);
 	static VkGSModel Create(const myvk::Ptr<myvk::Device> &pDevice, VkBufferUsageFlags bufferUsage, uint32_t splatCount,
 	                        std::invocable<VkDeviceSize, VkBufferUsageFlags> auto &&createBufferFunc) {
+		bufferUsage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 		VkGSModel vkModel{.splatCount = splatCount};
 		vkModel.pMeanBuffer = createBufferFunc(splatCount * sizeof(GSModel::Mean), bufferUsage);
 		vkModel.pScaleBuffer = createBufferFunc(splatCount * sizeof(GSModel::Scale), bufferUsage);
@@ -67,7 +68,8 @@ struct VkGSModel {
 		return vkModel;
 	}
 	static VkGSModel Create(const myvk::Ptr<myvk::Queue> &pQueue, VkBufferUsageFlags bufferUsage, const GSModel &model);
-	static VkGSModel Create(const myvk::Ptr<myvk::Device> &pDevice, VkBufferUsageFlags bufferUsage, uint32_t splatCount);
+	static VkGSModel Create(const myvk::Ptr<myvk::Device> &pDevice, VkBufferUsageFlags bufferUsage,
+	                        uint32_t splatCount);
 	bool IsEmpty() const { return splatCount == 0; }
 	vkgsraster::Rasterizer::SplatArgs GetSplatArgs() const;
 };
