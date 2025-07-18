@@ -18,9 +18,10 @@ struct CuTileRasterizer {
 
 			char *Update(std::size_t updateSize);
 		};
-		ResizeableBuffer geometryBuffer{}, binningBuffer{}, imageBuffer{}, dLBuffer{};
+		ResizeableBuffer geometryBuffer{}, binningBuffer{}, imageBuffer{}, sampleBuffer{}, dLBuffer{};
 
 		int numRendered{};
+		int wtfIsThis{};
 	};
 
 	using PerfQuery = CudaRasterizer::Rasterizer::PerfQuery;
