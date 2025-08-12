@@ -1,0 +1,42 @@
+name: Linux GCC
+
+on:
+  push:
+  pull_request:
+  release:
+
+jobs:
+  build:
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {
+            name: "Linux X11 64",
+            os: ubuntu-latest,
+            build_type: "Release",
+            generators: "Ninja"
+          }
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install ninja-build xorg-dev
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake \
+            -S . \
+            -B . \
+            -DCMAKE_BUILD_TYPE=${{ matrix.config.build_type }} \
+            -G "${{ matrix.config.generators }}" 
+
+      - name: Build
+        shell: bash
+        run: cmake --build . --config ${{ matrix.config.build_type }}
