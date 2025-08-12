@@ -1,5 +1,9 @@
 # VkDiffGaussianRasterizer
 
+[![Linux GCC](https://github.com/AdamYuan/VkDiffGaussianRasterizer/actions/workflows/linux-gcc.yml/badge.svg)](https://github.com/AdamYuan/VkDiffGaussianRasterizer/actions/workflows/linux-gcc.yml)
+[![Windows MSVC](https://github.com/AdamYuan/VkDiffGaussianRasterizer/actions/workflows/windows-msvc.yml/badge.svg)](https://github.com/AdamYuan/VkDiffGaussianRasterizer/actions/workflows/windows-msvc.yml)
+[![MacOS Clang](https://github.com/AdamYuan/VkDiffGaussianRasterizer/actions/workflows/macos-clang.yml/badge.svg)](https://github.com/AdamYuan/VkDiffGaussianRasterizer/actions/workflows/macos-clang.yml)
+
 Reference implementation of ArXiv PrePrint paper: ["Efficient Differentiable Hardware Rasterization for 3D Gaussian Splatting"](https://arxiv.org/abs/2505.18764) by Yitian Yuan & Qianyue He. This paper was once a conference track submission for SIGGRAPH Asia 2025, yet **was unfortunately rejected**. Since neither of the authors still wants to continue working on 3DGS, the authors decided to make the repo open-sourced for everyone. So if you wish to cite, the following BibTex will do:
 ```
 @article{yuan2025efficient,
@@ -10,10 +14,10 @@ Reference implementation of ArXiv PrePrint paper: ["Efficient Differentiable Har
 }
 ```
 
-#### Abstract
+## Abstract
 Recent works demonstrate the advantages of hardware rasterization for 3D Gaussian Splatting (3DGS) in forward-pass rendering through fast GPU-optimized graphics and fixed memory footprint. However, extending these benefits to backward-pass gradient computation remains challenging due to graphics pipeline constraints. We present a differentiable hardware rasterizer for 3DGS that overcomes the memory and performance limitations of tile-based software rasterization. Our solution employs programmable blending for per-pixel gradient computation combined with a hybrid gradient reduction strategy (quad-level + subgroup) in fragment shaders, achieving over 10x faster backward rasterization versus naive atomic operations and 3x speedup over the canonical tile-based rasterizer. Systematic evaluation reveals 16-bit render targets (float16 and unorm16) as the optimal accuracy-efficiency trade-off, achieving higher gradient accuracy among mixed-precision rendering formats with execution speeds second only to unorm8, while float32 texture incurs severe forward pass performance degradation due to suboptimal hardware optimizations. Our method with float16 formats demonstrates 3.07x acceleration in full pipeline execution (forward + backward passes) on RTX4080 GPUs with the MipNeRF dataset, outperforming the baseline tile-based renderer while preserving hardware rasterization's memory efficiency advantages -- incurring merely 2.67% of the memory overhead required for splat sorting operations. This work presents a unified differentiable hardware rasterization method that simultaneously optimizes runtime and memory usage for 3DGS, making it particularly suitable for resource-constrained devices with limited memory capacity.
 
-#### Special Notes
+## Special Notes
 
 The current NN frameworks like PyTorch and Paddle are not Vulkan friendly: PyTorch’s CUDA tensors lack the necessary shareable handle (via `cuMemExportToShareableHandle`) for seamless Vulkan memory sharing, since the allocation of memory is done by `cudaMalloc(Async)` instead of `cuMemCreate`. We therefore do not offer end-to-end 3DGS training modules, which was one of the main weaknesses criticized heavily by the reviewers. Yet we still note that our method offers promising avenues for reducing memory footprints and accelerating computation.
 
