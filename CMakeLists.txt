@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.15)
 project(VkDiffGaussianRasterizer)
 
+option(VKGSRASTER_BUILD_TESTING "Build tests" ON)
+option(VKGSRASTER_BUILD_CUDA_TESTING "Build CUDA-dependent tests" ON)
+
 set(CMAKE_CXX_STANDARD 20)
 
 # Windows' math include does not define constants by default.
@@ -31,8 +34,6 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release")
 endif ()
 
 add_subdirectory(dep/MyVK)
-# add_subdirectory(dep/glm)
-
 add_subdirectory(shader)
 
 add_library(vkgsraster_DeviceSorter STATIC
@@ -58,47 +59,49 @@ target_link_libraries(vkgsraster_Rasterizer PUBLIC
         shader::Rasterizer
 )
 
-# Tests
+if (VKGSRASTER_BUILD_TESTING)
+    add_subdirectory(test/dep/json)
+    add_subdirectory(test/dep/tinyfiledialogs)
+    add_subdirectory(test/dep/stb_image_write)
 
-add_subdirectory(test/dep/json)
-add_subdirectory(test/dep/tinyfiledialogs)
-add_subdirectory(test/dep/diff-gaussian-rasterization)
-add_subdirectory(test/dep/stb_image_write)
+    add_executable(DeviceSorterTest
+            test/DeviceSorterTest.cpp
+    )
+    target_link_libraries(DeviceSorterTest PRIVATE
+            myvk::vulkan myvk::glfw myvk::imgui
+            vkgsraster::DeviceSorter
+            shader::DeviceSorterTest
+    )
 
-add_executable(DeviceSorterTest
-        test/DeviceSorterTest.cpp
-)
-target_link_libraries(DeviceSorterTest PRIVATE
-        myvk::vulkan myvk::glfw myvk::imgui
-        vkgsraster::DeviceSorter
-        shader::DeviceSorterTest
-)
+    add_executable(RasterizerTest
+            test/GSModel.cpp
+            test/RasterizerTest.cpp
+    )
+    target_link_libraries(RasterizerTest PRIVATE
+            myvk::vulkan myvk::glfw myvk::imgui
+            vkgsraster::Rasterizer
+            tinyfiledialogs
+    )
 
-add_executable(RasterizerTest
-        test/GSModel.cpp
-        test/RasterizerTest.cpp
-)
-target_link_libraries(RasterizerTest PRIVATE
-        myvk::vulkan myvk::glfw myvk::imgui
-        vkgsraster::Rasterizer
-        tinyfiledialogs
-)
-
-enable_language(CUDA)
-add_executable(PerformanceTest
-        test/GSModel.cpp
-        test/GSDataset.cpp
-        test/VkCuBuffer.cu
-        test/VkCuBuffer.hpp
-        test/CuTileRasterizer.cu
-        test/CuTileRasterizer.hpp
-        test/PerformanceTest.cpp
-        test/PerformanceTest.cu
-)
-target_link_libraries(PerformanceTest PRIVATE
-        myvk::vulkan
-        vkgsraster::Rasterizer
-        CudaRasterizer
-        nlohmann_json
-        stb_image_write
-)
+    if (VKGSRASTER_BUILD_CUDA_TESTING)
+        enable_language(CUDA)
+        add_subdirectory(test/dep/diff-gaussian-rasterization)
+        add_executable(PerformanceTest
+                test/GSModel.cpp
+                test/GSDataset.cpp
+                test/VkCuBuffer.cu
+                test/VkCuBuffer.hpp
+                test/CuTileRasterizer.cu
+                test/CuTileRasterizer.hpp
+                test/PerformanceTest.cpp
+                test/PerformanceTest.cu
+        )
+        target_link_libraries(PerformanceTest PRIVATE
+                myvk::vulkan
+                vkgsraster::Rasterizer
+                CudaRasterizer
+                nlohmann_json
+                stb_image_write
+        )
+    endif ()
+endif ()
