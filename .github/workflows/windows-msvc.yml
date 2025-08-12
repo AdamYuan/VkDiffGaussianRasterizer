@@ -33,6 +33,11 @@ jobs:
         with:
           submodules: recursive
 
+      - uses: humbletim/install-vulkan-sdk@v1.2
+        with:
+          version: latest
+          cache: true
+
       - name: Configure
         shell: bash
         run: |
