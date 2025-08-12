@@ -22,6 +22,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          submodules: recursive
 
       - name: Install dependencies
         run: |
