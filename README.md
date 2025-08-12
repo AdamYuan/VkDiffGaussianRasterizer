@@ -1,8 +1,8 @@
 # VkDiffGaussianRasterizer
 
-[![Linux GCC](https://github.com/AdamYuan/VkDiffGaussianRasterizer/actions/workflows/linux-gcc.yml/badge.svg)](https://github.com/AdamYuan/VkDiffGaussianRasterizer/actions/workflows/linux-gcc.yml)
-[![Windows MSVC](https://github.com/AdamYuan/VkDiffGaussianRasterizer/actions/workflows/windows-msvc.yml/badge.svg)](https://github.com/AdamYuan/VkDiffGaussianRasterizer/actions/workflows/windows-msvc.yml)
-[![MacOS Clang](https://github.com/AdamYuan/VkDiffGaussianRasterizer/actions/workflows/macos-clang.yml/badge.svg)](https://github.com/AdamYuan/VkDiffGaussianRasterizer/actions/workflows/macos-clang.yml)
+[![Linux GCC](https://github.com/AdamYuan/VkDiffGaussianRasterizer/workflows/Linux%20GCC/badge.svg)](https://github.com/AdamYuan/VkDiffGaussianRasterizer/actions/workflows/linux-gcc.yml)
+[![Windows MSVC](https://github.com/AdamYuan/VkDiffGaussianRasterizer/workflows/Windows%20MSVC/badge.svg)](https://github.com/AdamYuan/VkDiffGaussianRasterizer/actions/workflows/windows-msvc.yml)
+[![MacOS Clang](https://github.com/AdamYuan/VkDiffGaussianRasterizer/workflows/MacOS%20Clang/badge.svg)](https://github.com/AdamYuan/VkDiffGaussianRasterizer/actions/workflows/macos-clang.yml)
 
 Reference implementation of ArXiv PrePrint paper: ["Efficient Differentiable Hardware Rasterization for 3D Gaussian Splatting"](https://arxiv.org/abs/2505.18764) by Yitian Yuan & Qianyue He. This paper was once a conference track submission for SIGGRAPH Asia 2025, yet **was unfortunately rejected**. Since neither of the authors still wants to continue working on 3DGS, the authors decided to make the repo open-sourced for everyone. So if you wish to cite, the following BibTex will do:
 ```
