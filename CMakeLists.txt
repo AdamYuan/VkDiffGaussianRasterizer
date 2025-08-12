@@ -1,8 +1,15 @@
 cmake_minimum_required(VERSION 3.15)
+include(CheckLanguage)
 project(VkDiffGaussianRasterizer)
 
 option(VKGSRASTER_BUILD_TESTING "Build tests" ON)
 option(VKGSRASTER_BUILD_CUDA_TESTING "Build CUDA-dependent tests" ON)
+
+check_language(CUDA)
+if (NOT CMAKE_CUDA_COMPILER)
+    message("CUDA not available, cannot build CUDA-dependent tests")
+    set(VKGSRASTER_BUILD_CUDA_TESTING OFF)
+endif ()
 
 set(CMAKE_CXX_STANDARD 20)
 
